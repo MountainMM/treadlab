@@ -1,0 +1,40 @@
+# TreadLab — static web app, safe to drop into a subfolder of a WordPress
+# site (e.g. /treadlab/). This file keeps WordPress and the usual caching
+# plugins out of the way; it is ignored by TreadLab.bat on Windows and by
+# hosts that don't run Apache (see the README for nginx).
+
+# 1. Serve this folder's files directly. WordPress's front controller must
+#    not rewrite anything under here.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^ - [L]
+</IfModule>
+
+# 2. Content types some shared hosts still get wrong. A manifest or an ES
+#    module served as text/html silently breaks install and startup.
+<IfModule mod_mime.c>
+  AddType text/javascript             .js
+  AddType application/json            .json
+  AddType application/manifest+json   .webmanifest
+  AddType image/png                   .png
+  AddType image/svg+xml               .svg
+</IfModule>
+
+# 3. Caching. The service worker itself must never be cached, or a future
+#    update can never reach a phone that has already installed the app.
+<IfModule mod_headers.c>
+  <FilesMatch "sw\.js$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </FilesMatch>
+  <FilesMatch "\.(html|json)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+  <FilesMatch "\.(js|css|png)$">
+    Header set Cache-Control "public, max-age=3600"
+  </FilesMatch>
+</IfModule>
+
+# 4. Don't hand the directory listing out if index.html ever goes missing.
+<IfModule mod_autoindex.c>
+  Options -Indexes
+</IfModule>

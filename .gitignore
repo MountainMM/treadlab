@@ -1,0 +1,23 @@
+# Bundled Python runtime (~26 MB of third-party binaries). Keep it out of
+# git: it is a redistribution of python.org's embeddable build, and anyone
+# cloning can use their own Python -- TreadLab needs no packages at all.
+python-embed/
+
+# FTP/manual upload build. The GitHub Pages copy lives in docs/ and IS
+# committed, because Pages serves it directly.
+web/
+
+# Generated test fixtures: recreate with
+#   python tests/make_golden.py
+treadlab/static/_test/golden/
+
+__pycache__/
+*.pyc
+*.pyo
+
+# Editor / OS noise
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store

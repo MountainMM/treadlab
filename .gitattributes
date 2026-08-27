@@ -1,0 +1,10 @@
+# Keep line endings consistent in the repo (LF) regardless of who clones it.
+* text=auto eol=lf
+
+# Windows launcher must keep CRLF or cmd.exe can mis-parse it.
+*.bat text eol=crlf
+
+# Never line-ending-mangle binaries.
+*.png binary
+*.fit binary
+*.ico binary

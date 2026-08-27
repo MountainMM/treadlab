@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TreadLab — treadmill run simulator</title>
+<meta name="description" content="Turn treadmill runs into Strava-ready FIT files with real elevation gain.">
+<meta name="theme-color" content="#14171c">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 26 L14 8 L20 17 L24 12 L30 26 Z' fill='%23ff6b35'/%3E%3C/svg%3E">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="TreadLab">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 32 32" class="logo"><path d="M2 26 L14 8 L20 17 L24 12 L30 26 Z"/></svg>
+    <h1>TreadLab</h1>
+    <span class="tagline">treadmill run → Strava-ready FIT with real elevation gain</span>
+  </div>
+  <span class="version" id="version">…</span>
+</header>
+
+<nav id="tabs">
+  <button class="tab active" data-tab="plan">1 · Plan</button>
+  <button class="tab" data-tab="live">2 · Live run</button>
+  <button class="tab" data-tab="finish">3 · Finish &amp; export</button>
+</nav>
+
+<main>
+
+<!-- ============================= PLAN ============================= -->
+<section id="tab-plan" class="pane active">
+  <p class="hint">Recreate your treadmill session as segments — or skip this tab and record it
+     <a href="#" data-goto="live">live</a> instead. Each segment becomes a lap in the FIT file.<br>
+     <b>by</b> picks which two you type: <i>time</i> + speed, <i>dist</i> + speed, or
+     <i>dist + time</i> — where the speed is worked out for you.
+     <b>hill</b> picks whether you type the grade in <i>%</i> or the climb in <i>m</i>.
+     Greyed italic values are the ones TreadLab calculates; change a dropdown to swap
+     which is which. Negative grades are allowed for decline.</p>
+
+  <div class="tablewrap">
+    <table id="segTable">
+      <thead><tr>
+        <th></th><th>#</th><th>by</th><th>length</th><th>speed<br>km/h</th><th>pace</th>
+        <th>time</th><th>hill</th><th>incline<br>%</th><th>climb<br>m</th><th></th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="row gap">
+    <button id="addSeg" class="btn">+ add segment</button>
+    <span class="grow"></span>
+    <label class="inline">repeat ticked <input id="dupCount" type="number" value="2" min="2" max="50"> ×</label>
+    <button id="dupSel" class="btn ghost">duplicate</button>
+    <button id="clearPlan" class="btn ghost danger">clear</button>
+  </div>
+
+  <div id="planTotals" class="totals"></div>
+  <canvas id="planChart" class="chart" height="300"></canvas>
+  <div class="row">
+    <span class="grow"></span>
+    <button id="usePlan" class="btn primary big">use this plan →</button>
+  </div>
+</section>
+
+<!-- ============================= LIVE ============================= -->
+<section id="tab-live" class="pane">
+  <p class="hint">Mirror the treadmill as you run: bump speed/incline when you change them on the
+     machine. <b>Space</b> start/pause · <b>↑↓</b> speed ±0.1 (Shift ±1.0) ·
+     <b>←→</b> incline ±0.5 (Shift ±1.0) · <b>L</b> lap.</p>
+
+  <div class="live-grid">
+    <div class="live-cell wide">
+      <div class="live-label">elapsed</div>
+      <div id="liveTimer" class="live-huge mono">00:00</div>
+      <div id="liveState" class="live-sub">ready</div>
+    </div>
+    <div class="live-cell">
+      <div class="live-label">speed <span class="unit">km/h</span></div>
+      <div id="liveSpeed" class="live-huge accent mono">9.0</div>
+      <div class="btnrow">
+        <button class="btn step" data-speed="-1">−1</button>
+        <button class="btn step" data-speed="-0.1">−.1</button>
+        <button class="btn step" data-speed="0.1">+.1</button>
+        <button class="btn step" data-speed="1">+1</button>
+      </div>
+    </div>
+    <div class="live-cell">
+      <div class="live-label">incline <span class="unit">%</span></div>
+      <div id="liveIncline" class="live-huge blue mono">1.0</div>
+      <div class="btnrow">
+        <button class="btn step" data-incline="-1">−1</button>
+        <button class="btn step" data-incline="-0.5">−.5</button>
+        <button class="btn step" data-incline="0.5">+.5</button>
+        <button class="btn step" data-incline="1">+1</button>
+      </div>
+    </div>
+    <div class="live-cell">
+      <div class="live-label">distance</div>
+      <div id="liveDist" class="live-big mono">0.00 km</div>
+      <div class="live-sub" id="livePace">pace —</div>
+    </div>
+    <div class="live-cell">
+      <div class="live-label">climb</div>
+      <div id="liveClimb" class="live-big green mono">0 m</div>
+      <div class="live-sub" id="liveLaps">no laps</div>
+    </div>
+    <div class="live-cell">
+      <div class="live-label">heart rate</div>
+      <div id="liveHr" class="live-big red mono">—</div>
+      <button id="bleBtn" class="btn small">♥ connect strap</button>
+      <div id="bleStatus" class="live-sub"></div>
+    </div>
+  </div>
+
+  <div class="row gap">
+    <button id="liveStart" class="btn primary big">▶ start</button>
+    <button id="liveLap" class="btn big" disabled>⚑ lap</button>
+    <span class="grow"></span>
+    <button id="liveReset" class="btn ghost danger" disabled>discard</button>
+    <button id="liveFinish" class="btn green big" disabled>✔ finish run</button>
+  </div>
+
+  <p class="hint">Your full speed/incline/elevation chart appears on the
+     <b>Finish &amp; export</b> tab when you press <b>✔ finish run</b>.</p>
+</section>
+
+<!-- ============================ FINISH ============================ -->
+<section id="tab-finish" class="pane">
+  <div id="noActivity" class="hint">Nothing to export yet — build a
+     <a href="#" data-goto="plan">plan</a> or record a
+     <a href="#" data-goto="live">live run</a> first.</div>
+
+  <div id="finishBody" style="display:none">
+    <div id="summary" class="totals big"></div>
+    <canvas id="finishChart" class="chart" height="300"></canvas>
+
+    <fieldset>
+      <legend>♥ heart rate from your watch <span class="opt">(optional)</span></legend>
+      <p class="hint">Did the same run with a watch or HR strap? Load its .FIT file and TreadLab
+         copies the real heart-rate stream — plus cadence and temperature when the file has them —
+         onto this activity, so Strava gets your elevation <i>and</i> your actual HR in one
+         upload.</p>
+      <div class="row gap">
+        <label class="btn filebtn">choose .fit file<input id="hrFile" type="file" accept=".fit,.FIT"></label>
+        <span id="hrInfo" class="grow subtle">no file loaded</span>
+        <button id="hrClear" class="btn ghost small" style="display:none">remove</button>
+      </div>
+      <div id="hrControls" style="display:none">
+        <div class="row gap wrap">
+          <label class="inline check"><input id="adoptStart" type="checkbox" checked>
+            use the HR file's real start time for this activity</label>
+          <label class="inline check"><input id="copyCad" type="checkbox" checked>
+            also copy cadence</label>
+          <label class="inline check"><input id="copyTemp" type="checkbox" checked>
+            also copy temperature</label>
+        </div>
+        <div class="row gap">
+          <label class="inline">align offset <input id="hrOffset" type="number" value="0" step="1"> s</label>
+          <button class="btn small nudge" data-nudge="-30">−30</button>
+          <button class="btn small nudge" data-nudge="-5">−5</button>
+          <button class="btn small nudge" data-nudge="5">+5</button>
+          <button class="btn small nudge" data-nudge="30">+30</button>
+          <span id="hrCoverage" class="grow subtle right"></span>
+        </div>
+        <p class="hint">Positive offset = your HR recording started <i>before</i> the simulated
+           activity (skips the first seconds of the HR trace). Watch the red line on the chart.</p>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>⬇ export</legend>
+      <div class="row gap wrap">
+        <label class="inline">activity type
+          <select id="sportSel">
+            <option value="virtual_activity">Virtual run (recommended — Strava keeps the elevation)</option>
+            <option value="treadmill">Treadmill run</option>
+          </select>
+        </label>
+        <label class="inline">start time <input id="startTime" type="datetime-local" step="1"></label>
+        <label class="inline">start altitude <input id="startAlt" type="number" value="100" step="10"> m</label>
+        <label class="inline">calories <input id="calories" type="number" min="0" placeholder="auto"> kcal</label>
+        <label class="inline">map loop
+          <select id="gpsLoc">
+            <option value="watopia">near Watopia — Zwift's corner of the Pacific</option>
+            <option value="nemo">Point Nemo — the spacecraft graveyard</option>
+            <option value="off">no map</option>
+          </select>
+        </label>
+      </div>
+      <div class="row gap">
+        <button id="exportBtn" class="btn primary big">⬇ download .FIT</button>
+        <span id="exportStatus" class="grow subtle"></span>
+      </div>
+      <p class="hint">Then upload at <b>strava.com/upload</b>. Tip: make your first upload
+         <b>private</b> and check the elevation shows up the way you want — “Virtual run” is what
+         Zwift uses and reliably keeps file elevation; some platforms zero out elevation on
+         activities flagged “treadmill”.</p>
+      <p class="hint"><b>Map loop</b> draws your run as a closed loop in verified-empty ocean,
+         sized so the loop equals your distance — purely so Strava shows a map.
+         <b>Near Watopia</b> (12°S 166°E) parks it in the same South Pacific neighbourhood where
+         Zwift georeferences Watopia, 80+ km clear of any land, road or Zwift island.
+         <b>Point Nemo</b> (49°S 123°W) is the oceanic pole of inaccessibility — 2,700 km from
+         the nearest land, where retired spacecraft are deorbited. Pick <b>no map</b> for a plain
+         activity. Either way the track can’t touch real-world segments or leaderboards.</p>
+    </fieldset>
+  </div>
+</section>
+
+</main>
+
+<footer>TreadLab v<span id="version2"></span> · offline &amp; open source · sibling of FitLab ·
+  distance = Σ speed·dt, climb = Σ speed·dt·incline%</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

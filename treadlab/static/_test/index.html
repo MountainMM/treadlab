@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TreadLab — JS engine self-check</title>
+<link rel="stylesheet" href="../style.css">
+<style>
+  main { padding: 16px; }
+  #summary { font-size: 20px; font-weight: 700; margin: 12px 0; }
+  .ok { color: var(--green); }
+  .bad { color: var(--red); }
+  ol { line-height: 1.7; padding-left: 28px; }
+  li.fail { color: var(--red); font-weight: 600; }
+  .detail { color: var(--subtle); font-weight: 400; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>TreadLab</h1>
+    <span class="tagline">JavaScript engine self-check</span>
+  </div>
+</header>
+<main>
+  <p class="hint">Rebuilds every golden file the Python engine produced
+     (<code>tests/make_golden.py</code>) and compares them byte for byte, then runs the
+     engine behaviour checks. Regenerate the goldens whenever the Python engine changes.</p>
+  <div id="summary">running…</div>
+  <ol id="list"></ol>
+</main>
+<script type="module">
+import { runTests } from "./engine_tests.js";
+runTests().then((r) => {
+  window.__testResult = r;
+  const s = document.getElementById("summary");
+  s.textContent = `${r.passed} passed, ${r.failed} failed`;
+  s.className = r.failed ? "bad" : "ok";
+  document.getElementById("list").innerHTML = r.results.map((x) =>
+    `<li class="${x.ok ? "" : "fail"}">${x.ok ? "✔" : "✘"} ${x.label}` +
+    `${x.detail ? ` <span class="detail">— ${x.detail}</span>` : ""}</li>`).join("");
+}).catch((e) => {
+  window.__testResult = { passed: 0, failed: 1, error: e.message, stack: e.stack };
+  document.getElementById("summary").textContent = "suite crashed: " + e.message;
+  document.getElementById("summary").className = "bad";
+});
+</script>
+</body>
+</html>
