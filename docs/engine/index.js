@@ -20,7 +20,7 @@ const SPORT_LABELS = {
   0: "generic", 1: "running", 2: "cycling", 4: "fitness equipment",
   5: "swimming", 11: "walking", 17: "hiking",
 };
-const SUB_SPORT_LABELS = { 1: "treadmill", 58: "virtual activity" };
+const SUB_SPORT_LABELS = { 1: "treadmill", 6: "indoor cycling", 58: "virtual activity" };
 
 const round1 = (x) => pyRound(x * 10) / 10;
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -50,6 +50,7 @@ export function buildExport(req) {
     if (r.hr != null) rec.hr = Number(r.hr);
     if (r.cad != null) rec.cad = Number(r.cad);
     if (r.temp != null) rec.temp = Number(r.temp);
+    if (r.power != null) rec.power = Number(r.power);
     return rec;
   });
   records.sort((a, b) => a.t - b.t);

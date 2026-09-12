@@ -84,7 +84,7 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); }
 
 /* plan table -- scrolls sideways rather than squashing on a phone */
 .tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-#segTable { width: 100%; border-collapse: collapse; margin-top: 4px; min-width: 620px; }
+#segTable { width: 100%; border-collapse: collapse; margin-top: 4px; min-width: 760px; }
 #segTable th {
   color: var(--subtle); font-size: 11px; text-transform: uppercase;
   letter-spacing: .5px; text-align: left; padding: 4px 6px;

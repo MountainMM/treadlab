@@ -1,4 +1,4 @@
-# TreadLab v0.4.0
+# TreadLab v0.5.0
 
 **Turn treadmill runs into Strava-ready FIT files with real elevation gain —
 and your real heart rate.**
@@ -97,7 +97,23 @@ In the repo: **Settings → Pages → Source: Deploy from a branch →
 `main` / `/docs`**. The app appears at
 `https://<you>.github.io/treadlab/` within a minute or two.
 
-After that, publishing an update is: rebuild `docs/`, commit, push.
+### Publishing an update
+
+Double-click **Publish.bat**. It rebuilds `docs/`, shows you exactly what
+changed, asks for a one-line description, commits and pushes.
+
+Rebuilding `docs/` first — always, automatically — is the point of the
+script: edit the app but forget that step and the live site silently keeps
+serving the old version, with nothing to indicate anything is wrong.
+
+`Publish.bat --dry-run` runs everything except the commit and upload, if
+you just want to see what would go.
+
+Doing it by hand is three commands from the project folder:
+
+    python-embed\python.exe tools\make_web_build.py docs
+    git add -A && git commit -m "what changed"
+    git push
 
 Notes specific to Pages:
 
@@ -138,6 +154,34 @@ Android, and works in any modern desktop browser.
    the run across rather than resetting it. A derived grade steeper than 15%
    is flagged, since most treadmills stop there. Tick rows + "duplicate" to
    build interval repeats; totals and the profile chart update live.
+
+   **power (W)** and **cad (rpm)** are optional. Fill either in and that
+   figure is written to every second of the segment — which is how you log
+   a session you only remember the averages for. Leave them blank and the
+   fields are omitted from the file entirely.
+
+## Rides as well as runs
+
+The activity dropdown on the export tab offers **Virtual ride** and
+**Indoor ride** alongside the two run types, so the same machinery works
+for an exercise bike. A typical bike session is one segment:
+
+| | |
+|---|---|
+| by | `dist + time` — e.g. 11.3 km and 30:10, speed solved for you |
+| hill | `%` at 0 if you aren't simulating a climb |
+| power / cad | the averages off the bike console, e.g. 75 W and 80 rpm |
+
+Then load your watch's heart-rate file as usual, and you get a ride whose
+HR you can read against distance. If your watch records **only** heart
+rate, that's fine — the cadence and temperature options simply don't
+appear, and your typed cadence is used instead. (If the watch *does* have
+cadence and you've typed one, TreadLab leaves the copy-cadence box
+unticked so your number isn't overwritten.)
+
+A constant wattage is an average, not a real power trace, so treat
+Strava's derived figures (normalised power, intensity) as indicative
+rather than meaningful.
 2. **Live run** — mirror the treadmill while you run: big timer, hotkeys
    (**Space** start/pause, **↑↓** speed ±0.1 — with Shift ±1.0, **←→**
    incline ±0.5 — Shift ±1.0, **L** lap). Optionally connect a Bluetooth
@@ -220,12 +264,12 @@ it. Regenerate the goldens whenever the Python engine changes.
   constant incline into a zig-zag.
 * `treadlab/server.py` — stdlib HTTP server, three endpoints
   (`/api/health`, `/api/parse-fit`, `/api/export`).
-* `tests/selfcheck.py` — 99-check Python suite:
+* `tests/selfcheck.py` — 108-check Python suite:
   `python-embed\python.exe tests\selfcheck.py`. Includes fitdecode
   strict-CRC cross-validation of generated files and a field-by-field
   comparison of the lite reader against fitdecode on a real sample file
   (those checks skip gracefully on a Python without fitdecode).
-* `/_test/` in the browser — 39-check JavaScript suite, described above.
+* `/_test/` in the browser — 41-check JavaScript suite, described above.
   Both suites should be green before shipping a change.
 * `tools/make_icons.py` — regenerates the PWA icons (stdlib only; draws
   and antialiases the mountain glyph straight into PNG).

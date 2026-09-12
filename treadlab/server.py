@@ -35,7 +35,7 @@ _MIME = {".html": "text/html; charset=utf-8", ".css": "text/css",
 
 _SPORT_NAMES = {0: "generic", 1: "running", 2: "cycling", 4: "fitness equipment",
                 5: "swimming", 11: "walking", 17: "hiking"}
-_SUB_SPORT_NAMES = {1: "treadmill", 58: "virtual activity"}
+_SUB_SPORT_NAMES = {1: "treadmill", 6: "indoor cycling", 58: "virtual activity"}
 
 
 def _parse_fit_response(data):
@@ -108,6 +108,8 @@ def _export_fit(req):
             rec["cad"] = float(r["cad"])
         if r.get("temp") is not None:
             rec["temp"] = float(r["temp"])
+        if r.get("power") is not None:
+            rec["power"] = float(r["power"])
         records.append(rec)
     records.sort(key=lambda r: r["t"])
 

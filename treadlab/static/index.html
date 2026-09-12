@@ -41,13 +41,18 @@
      <i>dist + time</i> — where the speed is worked out for you.
      <b>hill</b> picks whether you type the grade in <i>%</i> or the climb in <i>m</i>.
      Greyed italic values are the ones TreadLab calculates; change a dropdown to swap
-     which is which. Negative grades are allowed for decline.</p>
+     which is which. Negative grades are allowed for decline.
+     <b>power</b> and <b>cad</b> are optional — fill them in and the figure is written to
+     every second of that segment, which is how you log a ride you only remember the
+     averages for (e.g. 11.3 km, 75 W, 80 rpm). Leave them blank and they're omitted
+     entirely. Set the activity to <i>Virtual ride</i> on the export tab.</p>
 
   <div class="tablewrap">
     <table id="segTable">
       <thead><tr>
         <th></th><th>#</th><th>by</th><th>length</th><th>speed<br>km/h</th><th>pace</th>
-        <th>time</th><th>hill</th><th>incline<br>%</th><th>climb<br>m</th><th></th>
+        <th>time</th><th>hill</th><th>incline<br>%</th><th>climb<br>m</th>
+        <th>power<br>W</th><th>cad<br>rpm</th><th></th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -179,8 +184,10 @@
       <div class="row gap wrap">
         <label class="inline">activity type
           <select id="sportSel">
-            <option value="virtual_activity">Virtual run (recommended — Strava keeps the elevation)</option>
-            <option value="treadmill">Treadmill run</option>
+            <option value="running/virtual_activity">Virtual run (recommended — Strava keeps the elevation)</option>
+            <option value="running/treadmill">Treadmill run</option>
+            <option value="cycling/virtual_activity">Virtual ride</option>
+            <option value="cycling/indoor_cycling">Indoor ride</option>
           </select>
         </label>
         <label class="inline">start time <input id="startTime" type="datetime-local" step="1"></label>

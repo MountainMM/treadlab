@@ -309,6 +309,44 @@ check("export: avg speed ~3 m/s",
 check("export: no GPS unless asked", "lat" not in p3["records"][0]
       and "lat" not in p3["records"][600])
 
+# =============================================== 7aa. cycling / power
+# A ride logged from remembered averages: 11.3 km in 30:10, flat, constant
+# watts and cadence, no elevation.
+ride_req = {
+    "start_epoch": START, "sport": "cycling", "sub_sport": "virtual_activity",
+    "start_alt": 0.0, "gps": False,
+    "records": [{"t": t, "speed": 11300.0 / 1810, "dist": 11300.0 / 1810 * t,
+                 "alt": 0.0, "power": 75, "cad": 80} for t in range(1811)],
+    "laps": [{"start": 0, "end": 1810}],
+}
+fit_ride, _, _ = srv._export_fit(json.loads(json.dumps(ride_req)))
+p_ride = parse_fit(fit_ride)
+check("cycling: sport 2 / sub_sport 58 (virtual ride)",
+      p_ride["session"]["sport"] == 2 and p_ride["session"]["sub_sport"] == 58,
+      "%s/%s" % (p_ride["session"].get("sport"), p_ride["session"].get("sub_sport")))
+check("cycling: 11.30 km over 1810 s",
+      abs(p_ride["records"][-1]["dist"] - 11300) < 1
+      and p_ride["session"]["elapsed_s"] == 1810.0,
+      "%.1f m / %s s" % (p_ride["records"][-1]["dist"],
+                         p_ride["session"].get("elapsed_s")))
+check("cycling: a flat ride reports zero ascent",
+      p_ride["session"]["ascent_m"] == 0, str(p_ride["session"].get("ascent_m")))
+check("cycling: cadence round-trips at 80 rpm on every record",
+      all(int(r["cad"]) == 80 for r in p_ride["records"]))
+fit_indoor, _, _ = srv._export_fit(json.loads(json.dumps(
+    dict(ride_req, sub_sport="indoor_cycling"))))
+check("cycling: sub_sport indoor_cycling == 6",
+      parse_fit(fit_indoor)["session"]["sub_sport"] == 6)
+fit_nopower, _, _ = srv._export_fit(json.loads(json.dumps(dict(
+    ride_req,
+    records=[{"t": t, "speed": 11300.0 / 1810, "dist": 11300.0 / 1810 * t,
+              "alt": 0.0} for t in range(1811)]))))
+p_np = parse_fit(fit_nopower)
+check("cycling: leaving power/cadence blank omits both fields",
+      all("cad" not in r for r in p_np["records"])
+      and len(fit_nopower) < len(fit_ride) - 1811 * 2,
+      "%d vs %d bytes" % (len(fit_nopower), len(fit_ride)))
+
 # ================================================== 7a. terrain texture
 flat = [{"dist": 3.0 * t, "alt": 42.0} for t in range(1001)]
 add_texture(flat)
@@ -475,6 +513,15 @@ if HAVE_FITDECODE:
           fd_recs[100].get("temperature") == 24, str(fd_recs[100].get("temperature")))
     check("fitdecode: session avg_temperature 24",
           fd_sess.get("avg_temperature") == 24, str(fd_sess.get("avg_temperature")))
+
+    rd_recs, rd_sess = fd_read(fit_ride)
+    check("fitdecode: ride power on every record (75 W)",
+          len(rd_recs) == 1811 and all(r.get("power") == 75 for r in rd_recs),
+          str(sorted({r.get("power") for r in rd_recs})[:5]))
+    check("fitdecode: ride decodes as cycling",
+          "cycling" in str(rd_sess.get("sport")), str(rd_sess.get("sport")))
+    check("fitdecode: session avg/max cadence 80",
+          rd_sess.get("avg_cadence") == 80 and rd_sess.get("max_cadence") == 80)
 
     gd_recs, gd_sess = fd_read(fit_gps)
     check("fitdecode: gps export strict-decodes with positions",

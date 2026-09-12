@@ -86,6 +86,21 @@ SCENARIOS = {
                         laps=[{"start": 0, "end": 1800}], gps="watopia"),
     "gps_nemo": dict(BASE, records=ramp(1800, 12.0, 4.0),
                      laps=[{"start": 0, "end": 1800}], gps="nemo"),
+    # The real ride case: 11.3 km in 30:10, flat, constant averages noted
+    # from the bike console (75 W, 80 rpm), HR merged from a watch file that
+    # records heart rate and nothing else.
+    "ride_flat_power": dict(
+        BASE, sport="cycling", sub_sport="virtual_activity", gps=False,
+        records=[{"t": t, "speed": 11300.0 / 1810, "dist": 11300.0 / 1810 * t,
+                  "alt": 0.0, "power": 75, "cad": 80} for t in range(1811)],
+        laps=[{"start": 0, "end": 1810}],
+        hr={"samples": [[t, 128 + (t % 23), None, None] for t in range(1810)],
+            "offset": 0, "copy_cadence": False, "copy_temp": False}),
+    # indoor ride sub-sport, power only, no cadence
+    "ride_indoor": dict(
+        BASE, sport="cycling", sub_sport="indoor_cycling", gps=False, laps=[],
+        records=[{"t": t, "speed": 6.5, "dist": 6.5 * t, "alt": 0.0,
+                  "power": 90 + (t % 40)} for t in range(900)]),
     # values engineered to land exactly on .5 after fixed-point scaling, so
     # Python's round-half-to-even and JS's round-half-up would disagree
     "rounding_edges": dict(BASE, start_alt=0.0, gps=False, laps=[], records=[

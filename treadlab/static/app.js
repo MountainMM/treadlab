@@ -9,7 +9,7 @@
 
 import { buildExport, describeFit } from "./engine/index.js";
 
-const VERSION = "0.4.0";  // displayed version; keep treadlab/__init__.py in step
+const VERSION = "0.5.0";  // displayed version; keep treadlab/__init__.py in step
 
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
@@ -58,7 +58,7 @@ const state = {
   planBuild: null,          // {records, laps, totals} derived from plan
   activity: null,           // {source, records, laps, totals}
   hr: null,                 // /api/parse-fit response (+ .file name)
-  settings: { sport: "virtual_activity", startAlt: 100, gpsLoc: "watopia" },
+  settings: { sport: "running/virtual_activity", startAlt: 100, gpsLoc: "watopia" },
 };
 
 const live = {
@@ -93,8 +93,14 @@ function normSeg(s) {
     hill: s.hill === "m" ? "m" : "pct",
     incline: Number(s.incline) || 0,
     climb: Number(s.climb) || 0,
+    // Optional, and blank by default. Kept as strings so "" means "don't
+    // record this at all" -- distinct from a real 0.
+    power: s.power != null ? String(s.power) : "",
+    cad: s.cad != null ? String(s.cad) : "",
   };
 }
+
+const optNum = (v) => (v === "" || v == null ? null : Number(v));
 
 /* Solve one segment -> {dur (whole s), v (m/s), dist (m), incline (%),
    climb (m), kmh}. Everything derives from the integer duration so the
@@ -129,28 +135,37 @@ function segSolve(seg) {
     incline = Number(seg.incline) || 0;
     climb = dist * incline / 100;
   }
-  return { dur, v, dist, incline, climb, kmh: v * 3.6 };
+  return { dur, v, dist, incline, climb, kmh: v * 3.6,
+           power: optNum(seg.power), cad: optNum(seg.cad) };
 }
 
 function buildFromPlan() {
   const records = [], laps = [];
   let t = 0, dist = 0, alt = 0, ascent = 0, descent = 0;
-  let lastV = 0, lastInc = 0;
+  let lastV = 0, lastInc = 0, lastP = null, lastC = null;
   for (const seg of state.plan) {
     const s = segSolve(seg);
     if (!s.dur || !(s.v > 0)) continue;
+    const extra = {};
+    if (s.power != null) extra.power = s.power;
+    if (s.cad != null) extra.cad = s.cad;
     laps.push({ start: t, end: t + s.dur });
     for (let i = 0; i < s.dur; i++) {
-      records.push({ t, speed: s.v, incline: s.incline, alt, dist });
+      records.push({ t, speed: s.v, incline: s.incline, alt, dist, ...extra });
       const dv = s.v * 1 * s.incline / 100;
       dist += s.v;
       alt += dv;
       if (dv > 0) ascent += dv; else descent -= dv;
       t++;
     }
-    lastV = s.v; lastInc = s.incline;
+    lastV = s.v; lastInc = s.incline; lastP = s.power; lastC = s.cad;
   }
-  if (records.length) records.push({ t, speed: lastV, incline: lastInc, alt, dist });
+  if (records.length) {
+    const tail = { t, speed: lastV, incline: lastInc, alt, dist };
+    if (lastP != null) tail.power = lastP;
+    if (lastC != null) tail.cad = lastC;
+    records.push(tail);
+  }
   return { records, laps,
            totals: { duration: t, dist, ascent, descent } };
 }
@@ -166,7 +181,7 @@ function segRow(seg, i) {
           <option value="distTime">dist + time</option>
         </select></td>
     <td><input class="len" size="7"></td>
-    <td><input class="num speed" type="number" step="0.1" min="0" max="30"></td>
+    <td><input class="num speed" type="number" step="0.1" min="0" max="80"></td>
     <td class="drv pace"></td>
     <td><input class="num timeLen" size="7"></td>
     <td><select class="hill">
@@ -175,6 +190,10 @@ function segRow(seg, i) {
         </select></td>
     <td><input class="num incline" type="number" step="0.5" min="-25" max="40"></td>
     <td><input class="num climb" type="number" step="10"></td>
+    <td><input class="num power" type="number" step="5" min="0" max="2000"
+               placeholder="—" title="average watts (optional)"></td>
+    <td><input class="num cad" type="number" step="1" min="0" max="250"
+               placeholder="—" title="average cadence: rpm cycling, steps/min running (optional)"></td>
     <td><button class="del" title="remove">✕</button></td>`;
 
   tr.addEventListener("input", (e) => {
@@ -200,6 +219,8 @@ function readSegRow(tr, seg) {
   else seg.speed = parseFloat(tr.querySelector(".speed").value) || 0;
   if (seg.hill === "m") seg.climb = parseFloat(tr.querySelector(".climb").value) || 0;
   else seg.incline = parseFloat(tr.querySelector(".incline").value) || 0;
+  seg.power = tr.querySelector(".power").value.trim();
+  seg.cad = tr.querySelector(".cad").value.trim();
 }
 
 /* Fill every cell, editable ones included: for first render and mode swaps. */
@@ -213,6 +234,8 @@ function seedSegRow(tr, seg) {
   else tr.querySelector(".speed").value = seg.speed;
   if (seg.hill === "m") tr.querySelector(".climb").value = seg.climb;
   else tr.querySelector(".incline").value = seg.incline;
+  tr.querySelector(".power").value = seg.power;
+  tr.querySelector(".cad").value = seg.cad;
   showDerived(tr, seg);
 }
 
@@ -667,6 +690,12 @@ async function onHrFile(file) {
     $("#hrControls").style.display = "";
     $("#copyCad").parentElement.style.display = j.has_cad ? "" : "none";
     $("#copyTemp").parentElement.style.display = j.has_temp ? "" : "none";
+    // If you typed a cadence into the plan, that is the number you meant --
+    // don't let the watch's cadence quietly replace it.
+    if (j.has_cad && state.activity
+        && state.activity.records.some(r => r.cad != null)) {
+      $("#copyCad").checked = false;
+    }
     refreshFinish();
   } catch (err) {
     state.hr = null;
@@ -698,10 +727,12 @@ async function exportFit() {
   state.settings.gpsLoc = $("#gpsLoc").value;
   saveLocal();
 
+  // the dropdown carries both halves as "sport/sub_sport"
+  const [sport, subSport] = String(state.settings.sport).split("/");
   const payload = {
     start_epoch: startEpoch,
-    sport: "running",
-    sub_sport: state.settings.sport,
+    sport: sport || "running",
+    sub_sport: subSport || "virtual_activity",
     start_alt: state.settings.startAlt,
     gps: state.settings.gpsLoc === "off" ? false : state.settings.gpsLoc,
     calories: parseFloat($("#calories").value) || null,
@@ -709,6 +740,7 @@ async function exportFit() {
       t: r.t, speed: r.speed, alt: r.alt, dist: r.dist,
       ...(r.hr != null ? { hr: r.hr } : {}),
       ...(r.cad != null ? { cad: r.cad } : {}),
+      ...(r.power != null ? { power: r.power } : {}),
     })),
     laps: act.laps,
     hr: state.hr ? { samples: state.hr.samples, offset,
@@ -754,6 +786,9 @@ function loadLocal() {
       if (j.settings.gpsLoc === undefined)  // migrate pre-dropdown checkbox
         state.settings.gpsLoc = j.settings.gpsLoop === false ? "off" : "watopia";
       delete state.settings.gpsLoop;
+      // sport used to hold just the sub-sport, before rides were an option
+      if (state.settings.sport && !String(state.settings.sport).includes("/"))
+        state.settings.sport = "running/" + state.settings.sport;
     }
   } catch (e) { /* corrupted -> defaults */ }
 }
