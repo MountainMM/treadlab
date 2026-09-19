@@ -1,0 +1,2258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TreadLab — treadmill run simulator</title>
+<meta name="description" content="Turn treadmill runs into Strava-ready FIT files with real elevation gain.">
+<meta name="theme-color" content="#14171c">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 26 L14 8 L20 17 L24 12 L30 26 Z' fill='%23ff6b35'/%3E%3C/svg%3E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="TreadLab">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+:root {
+  --bg: #14171c;
+  --panel: #1c2129;
+  --panel2: #232a34;
+  --line: #303a47;
+  --text: #dde4ec;
+  --subtle: #8b98a8;
+  --accent: #ff6b35;      /* speed / brand orange */
+  --blue: #5aa2e0;        /* incline */
+  --green: #58c98b;       /* elevation */
+  --red: #ff5c72;         /* heart rate */
+  --danger: #ff5c72;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 15px/1.45 "Segoe UI", system-ui, sans-serif;
+  min-height: 100vh; display: flex; flex-direction: column;
+}
+main { flex: 1; width: min(980px, 96vw); margin: 0 auto; }
+
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 2vw 10px; border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, #191e26, var(--bg));
+}
+.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.logo { width: 26px; height: 26px; fill: var(--accent); align-self: center; }
+h1 { margin: 0; font-size: 22px; letter-spacing: 1px; }
+.tagline { color: var(--subtle); font-size: 13px; }
+.version { color: var(--subtle); font-size: 12px; }
+footer { color: var(--subtle); font-size: 12px; text-align: center; padding: 14px; }
+
+nav#tabs { display: flex; gap: 6px; width: min(980px, 96vw); margin: 14px auto 0; }
+.tab {
+  flex: 1; padding: 10px; background: var(--panel); color: var(--subtle);
+  border: 1px solid var(--line); border-bottom: none;
+  border-radius: 8px 8px 0 0; font-size: 15px; cursor: pointer;
+}
+.tab.active { background: var(--panel2); color: var(--text); font-weight: 600; }
+.pane {
+  display: none; background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 0 0 10px 10px; padding: 16px; margin-bottom: 20px;
+}
+.pane.active { display: block; }
+
+.hint { color: var(--subtle); font-size: 13px; margin: 4px 0 12px; }
+.hint b { color: var(--text); }
+a { color: var(--blue); }
+.mono { font-variant-numeric: tabular-nums; }
+.subtle { color: var(--subtle); font-size: 13px; }
+.right { text-align: right; }
+.opt { font-weight: 400; color: var(--subtle); font-size: 12px; }
+
+/* rows & buttons */
+.row { display: flex; align-items: center; margin: 10px 0; }
+.row.gap { gap: 8px; }
+.row.wrap { flex-wrap: wrap; }
+.grow { flex: 1; }
+.btn {
+  background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 7px; padding: 7px 14px; font-size: 14px; cursor: pointer;
+}
+.btn:hover:not(:disabled) { border-color: var(--subtle); }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #1a1006; font-weight: 700; }
+.btn.green { background: var(--green); border-color: var(--green); color: #06180d; font-weight: 700; }
+.btn.ghost { background: transparent; }
+.btn.danger { color: var(--danger); }
+.btn.big { padding: 10px 22px; font-size: 16px; }
+.btn.small { padding: 4px 10px; font-size: 13px; }
+.btn.step { min-width: 52px; font-weight: 700; }
+.inline { display: inline-flex; align-items: center; gap: 6px; color: var(--subtle); font-size: 13px; }
+.inline.check { color: var(--text); }
+input, select {
+  background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 8px; font-size: 14px;
+}
+input[type=number] { width: 78px; }
+input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); }
+.filebtn { position: relative; overflow: hidden; }
+.filebtn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+/* plan table -- scrolls sideways rather than squashing on a phone */
+.tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+#segTable { width: 100%; border-collapse: collapse; margin-top: 4px; min-width: 760px; }
+#segTable th {
+  color: var(--subtle); font-size: 11px; text-transform: uppercase;
+  letter-spacing: .5px; text-align: left; padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+#segTable td { padding: 4px 6px; border-bottom: 1px solid #262e39; }
+#segTable input, #segTable select { width: 100%; min-width: 56px; }
+#segTable input.num { text-align: right; }
+#segTable select.hill { min-width: 0; }
+/* cells TreadLab solves for you: readable, but clearly not yours to type in */
+#segTable input.derived {
+  background: transparent; border-color: transparent;
+  color: var(--subtle); font-style: italic;
+}
+#segTable input.warn { border-color: var(--danger); color: var(--danger); }
+#segTable .drv { color: var(--subtle); font-size: 13px; white-space: nowrap; }
+#segTable .del { background: none; border: none; color: var(--subtle); cursor: pointer; font-size: 15px; }
+#segTable .del:hover { color: var(--danger); }
+#segTable td.idx { color: var(--subtle); }
+
+.totals {
+  display: flex; flex-wrap: wrap; gap: 8px 26px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin: 12px 0;
+}
+.totals .t-item b { font-size: 17px; margin-right: 4px; }
+.totals.big .t-item b { font-size: 21px; }
+.totals .t-item span { color: var(--subtle); font-size: 12px; }
+
+.chart { width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+
+/* live grid */
+.live-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 12px 0;
+}
+.live-cell {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; text-align: center;
+}
+.live-cell.wide { grid-column: 1 / -1; padding: 6px; }
+.live-label { color: var(--subtle); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+.unit { text-transform: none; letter-spacing: 0; }
+.live-huge { font-size: 64px; font-weight: 800; line-height: 1.1; }
+.live-big { font-size: 30px; font-weight: 700; margin: 6px 0; }
+.live-sub { color: var(--subtle); font-size: 13px; min-height: 18px; }
+.accent { color: var(--accent); }
+.blue { color: var(--blue); }
+.green { color: var(--green); }
+.red { color: var(--red); }
+.btnrow { display: flex; gap: 6px; justify-content: center; margin-top: 8px; }
+
+fieldset {
+  border: 1px solid var(--line); border-radius: 10px; margin: 16px 0; padding: 10px 14px;
+}
+legend { padding: 0 8px; font-weight: 600; }
+
+/* installed-app polish: keep content clear of notches and home indicators */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+header { padding-top: calc(14px + env(safe-area-inset-top)); }
+footer { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+
+@media (max-width: 700px) {
+  /* minmax(0,…) lets a cell shrink past its button row's min-content width;
+     plain 1fr refuses to, which pushed the whole page sideways on a phone */
+  .live-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .live-cell { padding: 10px 8px; }
+  .btnrow { flex-wrap: wrap; }
+  .btn.step { min-width: 42px; padding: 7px 6px; }
+  .live-huge { font-size: 44px; }
+  main { width: 100%; }
+  .pane { border-radius: 0; border-left: none; border-right: none; padding: 12px; }
+  nav#tabs { width: 100%; }
+  .tab { font-size: 14px; padding: 10px 4px; }
+  .tagline { display: none; }
+  .btn.big { padding: 12px 18px; }        /* comfortable touch targets */
+  .live-cell.wide { grid-column: 1 / -1; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 32 32" class="logo"><path d="M2 26 L14 8 L20 17 L24 12 L30 26 Z"/></svg>
+    <h1>TreadLab</h1>
+    <span class="tagline">treadmill run → Strava-ready FIT with real elevation gain</span>
+  </div>
+  <span class="version" id="version">…</span>
+</header>
+
+<nav id="tabs">
+  <button class="tab active" data-tab="plan">1 · Plan</button>
+  <button class="tab" data-tab="live">2 · Live run</button>
+  <button class="tab" data-tab="finish">3 · Finish &amp; export</button>
+</nav>
+
+<main>
+
+<!-- ============================= PLAN ============================= -->
+<section id="tab-plan" class="pane active">
+  <p class="hint">Recreate your treadmill session as segments — or skip this tab and record it
+     <a href="#" data-goto="live">live</a> instead. Each segment becomes a lap in the FIT file.<br>
+     <b>by</b> picks which two you type: <i>time</i> + speed, <i>dist</i> + speed, or
+     <i>dist + time</i> — where the speed is worked out for you.
+     <b>hill</b> picks whether you type the grade in <i>%</i> or the climb in <i>m</i>.
+     Greyed italic values are the ones TreadLab calculates; change a dropdown to swap
+     which is which. Negative grades are allowed for decline.
+     <b>power</b> and <b>cad</b> are optional — fill them in and the figure is written to
+     every second of that segment, which is how you log a ride you only remember the
+     averages for (e.g. 11.3 km, 75 W, 80 rpm). Leave them blank and they're omitted
+     entirely. Set the activity to <i>Virtual ride</i> on the export tab.</p>
+
+  <div class="tablewrap">
+    <table id="segTable">
+      <thead><tr>
+        <th></th><th>#</th><th>by</th><th>length</th><th>speed<br>km/h</th><th>pace</th>
+        <th>time</th><th>hill</th><th>incline<br>%</th><th>climb<br>m</th>
+        <th>power<br>W</th><th>cad<br>rpm</th><th></th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="row gap">
+    <button id="addSeg" class="btn">+ add segment</button>
+    <span class="grow"></span>
+    <label class="inline">repeat ticked <input id="dupCount" type="number" value="2" min="2" max="50"> ×</label>
+    <button id="dupSel" class="btn ghost">duplicate</button>
+    <button id="clearPlan" class="btn ghost danger">clear</button>
+  </div>
+
+  <div id="planTotals" class="totals"></div>
+  <canvas id="planChart" class="chart" height="300"></canvas>
+  <div class="row">
+    <span class="grow"></span>
+    <button id="usePlan" class="btn primary big">use this plan →</button>
+  </div>
+</section>
+
+<!-- ============================= LIVE ============================= -->
+<section id="tab-live" class="pane">
+  <p class="hint">Mirror the treadmill as you run: bump speed/incline when you change them on the
+     machine. <b>Space</b> start/pause · <b>↑↓</b> speed ±0.1 (Shift ±1.0) ·
+     <b>←→</b> incline ±0.5 (Shift ±1.0) · <b>L</b> lap.</p>
+
+  <div class="live-grid">
+    <div class="live-cell wide">
+      <div class="live-label">elapsed</div>
+      <div id="liveTimer" class="live-huge mono">00:00</div>
+      <div id="liveState" class="live-sub">ready</div>
+    </div>
+    <div class="live-cell">
+      <div class="live-label">speed <span class="unit">km/h</span></div>
+      <div id="liveSpeed" class="live-huge accent mono">9.0</div>
+      <div class="btnrow">
+        <button class="btn step" data-speed="-1">−1</button>
+        <button class="btn step" data-speed="-0.1">−.1</button>
+        <button class="btn step" data-speed="0.1">+.1</button>
+        <button class="btn step" data-speed="1">+1</button>
+      </div>
+    </div>
+    <div class="live-cell">
+      <div class="live-label">incline <span class="unit">%</span></div>
+      <div id="liveIncline" class="live-huge blue mono">1.0</div>
+      <div class="btnrow">
+        <button class="btn step" data-incline="-1">−1</button>
+        <button class="btn step" data-incline="-0.5">−.5</button>
+        <button class="btn step" data-incline="0.5">+.5</button>
+        <button class="btn step" data-incline="1">+1</button>
+      </div>
+    </div>
+    <div class="live-cell">
+      <div class="live-label">distance</div>
+      <div id="liveDist" class="live-big mono">0.00 km</div>
+      <div class="live-sub" id="livePace">pace —</div>
+    </div>
+    <div class="live-cell">
+      <div class="live-label">climb</div>
+      <div id="liveClimb" class="live-big green mono">0 m</div>
+      <div class="live-sub" id="liveLaps">no laps</div>
+    </div>
+    <div class="live-cell">
+      <div class="live-label">heart rate</div>
+      <div id="liveHr" class="live-big red mono">—</div>
+      <button id="bleBtn" class="btn small">♥ connect strap</button>
+      <div id="bleStatus" class="live-sub"></div>
+    </div>
+  </div>
+
+  <div class="row gap">
+    <button id="liveStart" class="btn primary big">▶ start</button>
+    <button id="liveLap" class="btn big" disabled>⚑ lap</button>
+    <span class="grow"></span>
+    <button id="liveReset" class="btn ghost danger" disabled>discard</button>
+    <button id="liveFinish" class="btn green big" disabled>✔ finish run</button>
+  </div>
+
+  <p class="hint">Your full speed/incline/elevation chart appears on the
+     <b>Finish &amp; export</b> tab when you press <b>✔ finish run</b>.</p>
+</section>
+
+<!-- ============================ FINISH ============================ -->
+<section id="tab-finish" class="pane">
+  <div id="noActivity" class="hint">Nothing to export yet — build a
+     <a href="#" data-goto="plan">plan</a> or record a
+     <a href="#" data-goto="live">live run</a> first.</div>
+
+  <div id="finishBody" style="display:none">
+    <div id="summary" class="totals big"></div>
+    <canvas id="finishChart" class="chart" height="300"></canvas>
+
+    <fieldset>
+      <legend>♥ heart rate from your watch <span class="opt">(optional)</span></legend>
+      <p class="hint">Did the same run with a watch or HR strap? Load its .FIT file and TreadLab
+         copies the real heart-rate stream — plus cadence and temperature when the file has them —
+         onto this activity, so Strava gets your elevation <i>and</i> your actual HR in one
+         upload.</p>
+      <div class="row gap">
+        <label class="btn filebtn">choose .fit file<input id="hrFile" type="file" accept=".fit,.FIT"></label>
+        <span id="hrInfo" class="grow subtle">no file loaded</span>
+        <button id="hrClear" class="btn ghost small" style="display:none">remove</button>
+      </div>
+      <div id="hrControls" style="display:none">
+        <div class="row gap wrap">
+          <label class="inline check"><input id="adoptStart" type="checkbox" checked>
+            use the HR file's real start time for this activity</label>
+          <label class="inline check"><input id="copyCad" type="checkbox" checked>
+            also copy cadence</label>
+          <label class="inline check"><input id="copyTemp" type="checkbox" checked>
+            also copy temperature</label>
+        </div>
+        <div class="row gap">
+          <label class="inline">align offset <input id="hrOffset" type="number" value="0" step="1"> s</label>
+          <button class="btn small nudge" data-nudge="-30">−30</button>
+          <button class="btn small nudge" data-nudge="-5">−5</button>
+          <button class="btn small nudge" data-nudge="5">+5</button>
+          <button class="btn small nudge" data-nudge="30">+30</button>
+          <span id="hrCoverage" class="grow subtle right"></span>
+        </div>
+        <p class="hint">Positive offset = your HR recording started <i>before</i> the simulated
+           activity (skips the first seconds of the HR trace). Watch the red line on the chart.</p>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>⬇ export</legend>
+      <div class="row gap wrap">
+        <label class="inline">activity type
+          <select id="sportSel">
+            <option value="running/virtual_activity">Virtual run (recommended — Strava keeps the elevation)</option>
+            <option value="running/treadmill">Treadmill run</option>
+            <option value="cycling/virtual_activity">Virtual ride</option>
+            <option value="cycling/indoor_cycling">Indoor ride</option>
+          </select>
+        </label>
+        <label class="inline">start time <input id="startTime" type="datetime-local" step="1"></label>
+        <label class="inline">start altitude <input id="startAlt" type="number" value="100" step="10"> m</label>
+        <label class="inline">calories <input id="calories" type="number" min="0" placeholder="auto"> kcal</label>
+        <label class="inline">map loop
+          <select id="gpsLoc">
+            <option value="watopia">near Watopia — Zwift's corner of the Pacific</option>
+            <option value="nemo">Point Nemo — the spacecraft graveyard</option>
+            <option value="off">no map</option>
+          </select>
+        </label>
+      </div>
+      <div class="row gap">
+        <button id="exportBtn" class="btn primary big">⬇ download .FIT</button>
+        <span id="exportStatus" class="grow subtle"></span>
+      </div>
+      <p class="hint">Then upload at <b>strava.com/upload</b>. Tip: make your first upload
+         <b>private</b> and check the elevation shows up the way you want — “Virtual run” is what
+         Zwift uses and reliably keeps file elevation; some platforms zero out elevation on
+         activities flagged “treadmill”.</p>
+      <p class="hint"><b>Map loop</b> draws your run as a closed loop in verified-empty ocean,
+         sized so the loop equals your distance — purely so Strava shows a map.
+         <b>Near Watopia</b> (12°S 166°E) parks it in the same South Pacific neighbourhood where
+         Zwift georeferences Watopia, 80+ km clear of any land, road or Zwift island.
+         <b>Point Nemo</b> (49°S 123°W) is the oceanic pole of inaccessibility — 2,700 km from
+         the nearest land, where retired spacecraft are deorbited. Pick <b>no map</b> for a plain
+         activity. Either way the track can’t touch real-world segments or leaderboards.</p>
+    </fieldset>
+  </div>
+</section>
+
+</main>
+
+<footer>TreadLab v<span id="version2"></span> · offline &amp; open source · sibling of FitLab ·
+  distance = Σ speed·dt, climb = Σ speed·dt·incline%</footer>
+
+<script>
+(function () {
+"use strict";
+/* TreadLab single-file build -- GENERATED by tools/make_single_file.py.
+   Do not edit: rebuilt from treadlab/static/ on every publish.
+   Each module below keeps its own scope, exactly as ES modules do. */
+var __reg = {}, __done = {};
+function __def(id, fn) { __reg[id] = fn; }
+function __req(id) {
+  if (!Object.prototype.hasOwnProperty.call(__done, id)) {
+    if (!__reg[id]) { throw new Error("TreadLab: missing module " + id); }
+    __done[id] = __reg[id]();
+  }
+  return __done[id];
+}
+
+__def("app.js", function () {
+"use strict";
+/* TreadLab UI. Internal units: speed m/s, distance m, altitude m relative
+   to 0 (the export adds the configurable start altitude), time = integer
+   seconds from activity start. The UI shows km/h, km, %, min/km.
+
+   The FIT engine runs here in the browser (see engine/), so the app needs
+   no server at all: TreadLab.bat merely serves these files, and the same
+   folder installs as an offline web app on a phone. */
+
+  const { buildExport, describeFit } = __req("engine/index.js");
+
+const VERSION = "0.5.0";  // displayed version; keep treadlab/__init__.py in step
+
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+
+/* ---------------------------------------------------------------- utils */
+const pad2 = n => String(n).padStart(2, "0");
+
+function fmtDur(s) {
+  s = Math.max(0, Math.round(s));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+  return h ? `${h}:${pad2(m)}:${pad2(ss)}` : `${m}:${pad2(ss)}`;
+}
+function fmtPace(kmh) {
+  if (!kmh || kmh <= 0.1) return "—";
+  const spk = 3600 / kmh;
+  return `${Math.floor(spk / 60)}:${pad2(Math.round(spk % 60))}/km`;
+}
+function parseTimeLen(str) {          // "10" or "7.5" = minutes, "10:30" = mm:ss
+  str = String(str).trim();
+  if (!str) return 0;
+  if (str.includes(":")) {
+    const p = str.split(":").map(Number);
+    if (p.some(isNaN)) return 0;
+    return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + p[1];
+  }
+  const mins = parseFloat(str);
+  return isNaN(mins) ? 0 : mins * 60;
+}
+function toLocalInput(epoch) {
+  const d = new Date(epoch * 1000);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}` +
+         `T${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+function fromLocalInput(v) {
+  const t = new Date(v).getTime();
+  return isFinite(t) ? t / 1000 : null;
+}
+function fmtClock(epoch) {
+  const d = new Date(epoch * 1000);
+  return d.toLocaleDateString() + " " + d.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+}
+
+/* ---------------------------------------------------------------- state */
+const state = {
+  plan: [],
+  planBuild: null,          // {records, laps, totals} derived from plan
+  activity: null,           // {source, records, laps, totals}
+  hr: null,                 // /api/parse-fit response (+ .file name)
+  settings: { sport: "running/virtual_activity", startAlt: 100, gpsLoc: "watopia" },
+};
+
+const live = {
+  running: false, startedWall: 0, accum: 0, nextT: 0,
+  speed: 9.0, incline: 1.0, dist: 0, alt: 0, ascent: 0,
+  recs: [], lapMarks: [], timer: null,
+  hrBpm: null, hrAt: 0, bleDevice: null,
+};
+
+/* ----------------------------------------------------------------- plan */
+/* A segment is described by two independent choices:
+   mode  - which pair of {distance, time, speed} you type ("distTime" derives
+           speed; "time"/"dist" derive the other length from speed)
+   hill  - whether you type the grade ("pct") or the climb in metres ("m")
+   The remaining values are solved by segSolve() and shown read-only. */
+const MAX_GRADE = 15;  // beyond this, flag the derived grade as unlikely
+
+function defaultPlan() {
+  return [
+    normSeg({ mode: "time", len: "10:00", speed: 9.0, incline: 1.0 }),
+    normSeg({ mode: "time", len: "20:00", speed: 10.5, incline: 5.0 }),
+    normSeg({ mode: "time", len: "5:00", speed: 8.5, incline: 0.5 }),
+  ];
+}
+function normSeg(s) {
+  s = s || {};
+  return {
+    mode: ["time", "dist", "distTime"].includes(s.mode) ? s.mode : "time",
+    len: s.len != null ? String(s.len) : "5:00",
+    timeLen: s.timeLen != null ? String(s.timeLen) : "30:00",
+    speed: Number(s.speed) || 10,
+    hill: s.hill === "m" ? "m" : "pct",
+    incline: Number(s.incline) || 0,
+    climb: Number(s.climb) || 0,
+    // Optional, and blank by default. Kept as strings so "" means "don't
+    // record this at all" -- distinct from a real 0.
+    power: s.power != null ? String(s.power) : "",
+    cad: s.cad != null ? String(s.cad) : "",
+  };
+}
+
+const optNum = (v) => (v === "" || v == null ? null : Number(v));
+
+/* Solve one segment -> {dur (whole s), v (m/s), dist (m), incline (%),
+   climb (m), kmh}. Everything derives from the integer duration so the
+   displayed numbers and the exported 1 Hz records can never disagree. */
+function segSolve(seg) {
+  let dur = 0, v = 0;
+  if (seg.mode === "distTime") {
+    const km = parseFloat(seg.len), t = parseTimeLen(seg.timeLen);
+    if (km > 0 && t > 0) {
+      dur = Math.max(1, Math.round(t));
+      v = km * 1000 / dur;          // honour both typed values exactly
+    }
+  } else if (seg.mode === "dist") {
+    const km = parseFloat(seg.len), kmh = Number(seg.speed);
+    if (km > 0 && kmh > 0) {
+      dur = Math.max(1, Math.round(km * 3600 / kmh));
+      v = kmh / 3.6;
+    }
+  } else {
+    const t = parseTimeLen(seg.len), kmh = Number(seg.speed);
+    if (t > 0 && kmh > 0) {
+      dur = Math.max(1, Math.round(t));
+      v = kmh / 3.6;
+    }
+  }
+  const dist = v * dur;
+  let incline, climb;
+  if (seg.hill === "m") {
+    climb = Number(seg.climb) || 0;
+    incline = dist > 0 ? climb / dist * 100 : 0;
+  } else {
+    incline = Number(seg.incline) || 0;
+    climb = dist * incline / 100;
+  }
+  return { dur, v, dist, incline, climb, kmh: v * 3.6,
+           power: optNum(seg.power), cad: optNum(seg.cad) };
+}
+
+function buildFromPlan() {
+  const records = [], laps = [];
+  let t = 0, dist = 0, alt = 0, ascent = 0, descent = 0;
+  let lastV = 0, lastInc = 0, lastP = null, lastC = null;
+  for (const seg of state.plan) {
+    const s = segSolve(seg);
+    if (!s.dur || !(s.v > 0)) continue;
+    const extra = {};
+    if (s.power != null) extra.power = s.power;
+    if (s.cad != null) extra.cad = s.cad;
+    laps.push({ start: t, end: t + s.dur });
+    for (let i = 0; i < s.dur; i++) {
+      records.push({ t, speed: s.v, incline: s.incline, alt, dist, ...extra });
+      const dv = s.v * 1 * s.incline / 100;
+      dist += s.v;
+      alt += dv;
+      if (dv > 0) ascent += dv; else descent -= dv;
+      t++;
+    }
+    lastV = s.v; lastInc = s.incline; lastP = s.power; lastC = s.cad;
+  }
+  if (records.length) {
+    const tail = { t, speed: lastV, incline: lastInc, alt, dist };
+    if (lastP != null) tail.power = lastP;
+    if (lastC != null) tail.cad = lastC;
+    records.push(tail);
+  }
+  return { records, laps,
+           totals: { duration: t, dist, ascent, descent } };
+}
+
+function segRow(seg, i) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><input type="checkbox" class="pick"></td>
+    <td class="idx">${i + 1}</td>
+    <td><select class="mode">
+          <option value="time">time</option>
+          <option value="dist">dist</option>
+          <option value="distTime">dist + time</option>
+        </select></td>
+    <td><input class="len" size="7"></td>
+    <td><input class="num speed" type="number" step="0.1" min="0" max="80"></td>
+    <td class="drv pace"></td>
+    <td><input class="num timeLen" size="7"></td>
+    <td><select class="hill">
+          <option value="pct">%</option>
+          <option value="m">m</option>
+        </select></td>
+    <td><input class="num incline" type="number" step="0.5" min="-25" max="40"></td>
+    <td><input class="num climb" type="number" step="10"></td>
+    <td><input class="num power" type="number" step="5" min="0" max="2000"
+               placeholder="—" title="average watts (optional)"></td>
+    <td><input class="num cad" type="number" step="1" min="0" max="250"
+               placeholder="—" title="average cadence: rpm cycling, steps/min running (optional)"></td>
+    <td><button class="del" title="remove">✕</button></td>`;
+
+  tr.addEventListener("input", (e) => {
+    if (e.target.classList.contains("mode") || e.target.classList.contains("hill"))
+      return switchSegMode(tr, seg);
+    readSegRow(tr, seg);
+    showDerived(tr, seg);
+    recalcPlan();
+  });
+  tr.querySelector(".del").addEventListener("click", () => {
+    state.plan.splice(state.plan.indexOf(seg), 1);
+    renderPlan();
+  });
+  seedSegRow(tr, seg);
+  return tr;
+}
+
+/* Copy the row's editable cells into the segment. Read-only (derived) cells
+   are ignored -- they are output, never input. */
+function readSegRow(tr, seg) {
+  seg.len = tr.querySelector(".len").value;
+  if (seg.mode === "distTime") seg.timeLen = tr.querySelector(".timeLen").value;
+  else seg.speed = parseFloat(tr.querySelector(".speed").value) || 0;
+  if (seg.hill === "m") seg.climb = parseFloat(tr.querySelector(".climb").value) || 0;
+  else seg.incline = parseFloat(tr.querySelector(".incline").value) || 0;
+  seg.power = tr.querySelector(".power").value.trim();
+  seg.cad = tr.querySelector(".cad").value.trim();
+}
+
+/* Fill every cell, editable ones included: for first render and mode swaps. */
+function seedSegRow(tr, seg) {
+  tr.querySelector(".mode").value = seg.mode;
+  tr.querySelector(".hill").value = seg.hill;
+  const len = tr.querySelector(".len");
+  len.value = seg.len;
+  len.placeholder = seg.mode === "time" ? "min or mm:ss" : "km";
+  if (seg.mode === "distTime") tr.querySelector(".timeLen").value = seg.timeLen;
+  else tr.querySelector(".speed").value = seg.speed;
+  if (seg.hill === "m") tr.querySelector(".climb").value = seg.climb;
+  else tr.querySelector(".incline").value = seg.incline;
+  tr.querySelector(".power").value = seg.power;
+  tr.querySelector(".cad").value = seg.cad;
+  showDerived(tr, seg);
+}
+
+/* Refresh only the derived cells -- never touches a cell being typed in. */
+function showDerived(tr, seg) {
+  const s = segSolve(seg);
+  const cell = (sel, isDerived, value) => {
+    const el = tr.querySelector(sel);
+    el.readOnly = isDerived;
+    el.classList.toggle("derived", isDerived);
+    if (isDerived) el.value = value;
+  };
+  tr.querySelector(".pace").textContent = s.kmh ? fmtPace(s.kmh) : "—";
+  cell(".speed", seg.mode === "distTime", s.kmh ? s.kmh.toFixed(2) : "");
+  cell(".timeLen", seg.mode !== "distTime", s.dur ? fmtDur(s.dur) : "");
+  cell(".incline", seg.hill === "m", s.dur ? s.incline.toFixed(1) : "");
+  cell(".climb", seg.hill === "pct", s.dur ? Math.round(s.climb) : "");
+  const steep = s.dur > 0 && Math.abs(s.incline) > MAX_GRADE;
+  tr.querySelector(".incline").classList.toggle("warn", steep);
+  tr.querySelector(".incline").title = steep
+    ? `${s.incline.toFixed(1)}% is steeper than most treadmills go (${MAX_GRADE}%)`
+    : "";
+}
+
+/* Switching mode keeps the run you already described: the solved numbers
+   from the old mode become the typed numbers of the new one. */
+function switchSegMode(tr, seg) {
+  const before = segSolve(seg);
+  const mode = tr.querySelector(".mode").value;
+  const hill = tr.querySelector(".hill").value;
+  if (mode !== seg.mode) {
+    if (before.dur > 0) {
+      if (mode === "time") seg.len = fmtDur(before.dur);
+      else seg.len = (before.dist / 1000).toFixed(2);
+      if (mode === "distTime") seg.timeLen = fmtDur(before.dur);
+      else seg.speed = Math.round(before.kmh * 100) / 100;
+    }
+    seg.mode = mode;
+  }
+  if (hill !== seg.hill) {
+    if (before.dur > 0) {
+      if (hill === "m") seg.climb = Math.round(before.climb);
+      else seg.incline = Math.round(before.incline * 10) / 10;
+    }
+    seg.hill = hill;
+  }
+  seedSegRow(tr, seg);
+  recalcPlan();
+}
+function renderPlan() {
+  const tb = $("#segTable tbody");
+  tb.innerHTML = "";
+  state.plan.forEach((seg, i) => tb.appendChild(segRow(seg, i)));
+  recalcPlan();
+}
+function recalcPlan() {
+  state.planBuild = buildFromPlan();
+  const t = state.planBuild.totals;
+  $("#planTotals").innerHTML = totalsHtml([
+    [fmtDur(t.duration), "time"],
+    [(t.dist / 1000).toFixed(2) + " km", "distance"],
+    ["+" + Math.round(t.ascent) + " m", "ascent"],
+    ["−" + Math.round(t.descent) + " m", "descent"],
+    [t.duration ? fmtPace(t.dist / t.duration * 3.6) : "—", "avg pace"],
+  ]);
+  drawProfile($("#planChart"), state.planBuild.records);
+  saveLocal();
+}
+function totalsHtml(items) {
+  return items.map(([v, l]) =>
+    `<span class="t-item"><b class="mono">${v}</b><span>${l}</span></span>`).join("");
+}
+
+/* ---------------------------------------------------------------- chart */
+function drawProfile(canvas, recs, hrOpts) {
+  // Design height is cached on first draw: canvas.width/height assignments
+  // rewrite the element's attributes, so re-reading getAttribute("height")
+  // here would compound dpr scaling on every redraw (canvas grew until it
+  // blanked on scaled displays).
+  if (!canvas._designH)
+    canvas._designH = parseInt(canvas.getAttribute("height"), 10) || 240;
+  const ch = canvas._designH;
+  const cw = canvas.clientWidth || canvas.parentElement.clientWidth || 900;
+  const dpr = window.devicePixelRatio || 1;
+  const bw = Math.round(cw * dpr), bh = Math.round(ch * dpr);
+  if (canvas.width !== bw || canvas.height !== bh) {
+    canvas.width = bw; canvas.height = bh;
+  }
+  canvas.style.height = ch + "px";
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.font = "11px Segoe UI";
+  if (!recs || recs.length < 2) {
+    ctx.fillStyle = "#8b98a8";
+    ctx.fillText("add segments to see the profile", 16, 24);
+    canvas._hover = null;
+    return;
+  }
+  const css = getComputedStyle(document.documentElement);
+  const C = n => css.getPropertyValue(n).trim();
+  const L = 46, R = 40, T = 6, B = 18;
+  const w = cw - L - R;
+  const dur = recs[recs.length - 1].t || 1;
+  const x = t => L + t / dur * w;
+
+  const lanes = [
+    { key: "speed", scale: v => v * 3.6, color: C("--accent"), label: "km/h", fill: true },
+    { key: "incline", scale: v => v, color: C("--blue"), label: "%", fill: true, zero: true },
+    { key: "alt", scale: v => v + Number(state.settings.startAlt || 0), color: C("--green"), label: "m", fill: true },
+  ];
+  const laneH = (ch - T - B) / lanes.length;
+
+  lanes.forEach((lane, li) => {
+    const top = T + li * laneH, bot = top + laneH - 8;
+    const vals = recs.map(r => lane.scale(r[lane.key]));
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    if (lane.zero) lo = Math.min(lo, 0);
+    if (hi - lo < 1e-9) hi = lo + 1;
+    const pad = (hi - lo) * 0.08;
+    lo -= lane.zero ? 0 : pad; hi += pad;
+    const y = v => bot - (v - lo) / (hi - lo) * (bot - top);
+
+    ctx.strokeStyle = "#2a323e";
+    ctx.beginPath(); ctx.moveTo(L, bot + .5); ctx.lineTo(L + w, bot + .5); ctx.stroke();
+
+    ctx.beginPath();
+    recs.forEach((r, i) => {
+      const px = x(r.t), py = y(vals[i]);
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    });
+    if (lane.fill) {
+      ctx.save();
+      ctx.lineTo(x(recs[recs.length - 1].t), y(Math.max(lo, Math.min(hi, lane.zero ? 0 : lo))));
+      ctx.lineTo(x(recs[0].t), y(Math.max(lo, Math.min(hi, lane.zero ? 0 : lo))));
+      ctx.closePath();
+      ctx.globalAlpha = 0.16; ctx.fillStyle = lane.color; ctx.fill();
+      ctx.restore();
+      ctx.beginPath();
+      recs.forEach((r, i) => {
+        const px = x(r.t), py = y(vals[i]);
+        i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      });
+    }
+    ctx.strokeStyle = lane.color; ctx.lineWidth = 1.6; ctx.stroke(); ctx.lineWidth = 1;
+
+    ctx.fillStyle = "#8b98a8";
+    ctx.textAlign = "right";
+    ctx.fillText(fmtNum(hi), L - 5, top + 9);
+    ctx.fillText(fmtNum(lo), L - 5, bot);
+    ctx.textAlign = "left";
+    ctx.fillStyle = lane.color;
+    ctx.fillText(lane.key === "alt" ? "elev m" : lane.key + " " + lane.label, L + 4, top + 10);
+    lane._y = y; lane._top = top; lane._bot = bot;
+  });
+
+  // heart-rate overlay across the top (speed) lane, right-hand scale
+  const hrPts = collectHrPoints(recs, hrOpts, dur);
+  if (hrPts.length > 1) {
+    const lane = lanes[0];
+    const hrs = hrPts.map(p => p[1]);
+    let lo = Math.min(...hrs), hi = Math.max(...hrs);
+    if (hi - lo < 5) { lo -= 3; hi += 3; }
+    const y = v => lane._bot - (v - lo) / (hi - lo) * (lane._bot - lane._top);
+    ctx.beginPath();
+    let started = false;
+    hrPts.forEach(p => {
+      const px = x(p[0]), py = y(p[1]);
+      started ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      started = true;
+    });
+    ctx.strokeStyle = C("--red"); ctx.globalAlpha = 0.9; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.fillStyle = C("--red"); ctx.textAlign = "left";
+    ctx.fillText(Math.round(hi) + "♥", L + w + 4, lanes[0]._top + 9);
+    ctx.fillText(Math.round(lo) + "♥", L + w + 4, lanes[0]._bot);
+  }
+
+  // x-axis time labels
+  ctx.fillStyle = "#8b98a8"; ctx.textAlign = "center";
+  const step = niceStep(dur);
+  for (let t = 0; t <= dur; t += step) ctx.fillText(fmtDur(t), x(t), ch - 5);
+  ctx.textAlign = "left";
+
+  canvas._hover = { recs, x, dur, L, w, hrPts };
+  if (!canvas._hoverBound) {
+    canvas._hoverBound = true;
+    canvas.addEventListener("mousemove", e => hoverReadout(canvas, e));
+    canvas.addEventListener("mouseleave", () => { canvas.title = ""; });
+  }
+}
+function fmtNum(v) {
+  return Math.abs(v) >= 100 ? Math.round(v) : (Math.round(v * 10) / 10);
+}
+function niceStep(dur) {
+  for (const s of [30, 60, 120, 300, 600, 900, 1800, 3600, 7200])
+    if (dur / s <= 9) return s;
+  return 14400;
+}
+function collectHrPoints(recs, hrOpts, dur) {
+  if (hrOpts && hrOpts.samples && hrOpts.samples.length) {
+    const off = Number(hrOpts.offset) || 0;
+    return hrOpts.samples
+      .map(s => [s[0] - off, s[1]])
+      .filter(p => p[0] >= 0 && p[0] <= dur);
+  }
+  return recs.filter(r => r.hr != null).map(r => [r.t, r.hr]);
+}
+function hoverReadout(canvas, e) {
+  const hv = canvas._hover;
+  if (!hv) return;
+  const rect = canvas.getBoundingClientRect();
+  const frac = (e.clientX - rect.left - hv.L) / hv.w;
+  if (frac < 0 || frac > 1) { canvas.title = ""; return; }
+  const t = frac * hv.dur;
+  let idx = Math.min(hv.recs.length - 1, Math.max(0, Math.round(t)));
+  // records are 1 Hz with t == index for plan/live, but be safe:
+  if (hv.recs[idx].t !== Math.round(t)) {
+    idx = hv.recs.findIndex(r => r.t >= t);
+    if (idx < 0) idx = hv.recs.length - 1;
+  }
+  const r = hv.recs[idx];
+  const hrPt = hv.hrPts.length ? nearestHrPt(hv.hrPts, t) : null;
+  canvas.title =
+    `${fmtDur(r.t)} · ${(r.speed * 3.6).toFixed(1)} km/h (${fmtPace(r.speed * 3.6)})` +
+    ` · ${r.incline.toFixed(1)} % · ${Math.round(r.alt + Number(state.settings.startAlt || 0))} m` +
+    (hrPt ? ` · ♥ ${Math.round(hrPt[1])}` : "");
+}
+function nearestHrPt(pts, t) {
+  let best = null;
+  for (const p of pts) if (!best || Math.abs(p[0] - t) < Math.abs(best[0] - t)) best = p;
+  return best && Math.abs(best[0] - t) <= 10 ? best : null;
+}
+
+/* ----------------------------------------------------------------- live */
+function liveElapsed() {
+  return live.accum + (live.running ? (performance.now() - live.startedWall) / 1000 : 0);
+}
+function liveStartPause() {
+  if (!live.running) {
+    live.running = true;
+    live.startedWall = performance.now();
+    if (!live.timer) live.timer = setInterval(liveTick, 250);
+    $("#liveStart").textContent = "❚❚ pause";
+    $("#liveState").textContent = "recording — mirror your treadmill";
+    $("#liveLap").disabled = $("#liveFinish").disabled = $("#liveReset").disabled = false;
+  } else {
+    live.accum = liveElapsed();
+    live.running = false;
+    $("#liveStart").textContent = "▶ resume";
+    $("#liveState").textContent = "paused (paused time is not recorded)";
+  }
+  liveTick();
+}
+function liveTick() {
+  const el = liveElapsed();
+  while (live.nextT <= Math.floor(el)) {
+    const v = live.speed / 3.6;
+    const rec = { t: live.nextT, speed: v, incline: live.incline,
+                  alt: live.alt, dist: live.dist };
+    if (live.hrBpm && Date.now() - live.hrAt < 10000) rec.hr = live.hrBpm;
+    live.recs.push(rec);
+    const dv = v * live.incline / 100;
+    live.dist += v; live.alt += dv;
+    if (dv > 0) live.ascent += dv;
+    live.nextT++;
+  }
+  $("#liveTimer").textContent = fmtDur(Math.floor(el));
+  $("#liveDist").textContent = (live.dist / 1000).toFixed(2) + " km";
+  $("#liveClimb").textContent = Math.round(live.ascent) + " m";
+  $("#livePace").textContent = "pace " + fmtPace(live.speed);
+  $("#liveLaps").textContent = live.lapMarks.length
+    ? live.lapMarks.length + 1 + " laps" : "no laps";
+  $("#liveHr").textContent =
+    (live.hrBpm && Date.now() - live.hrAt < 10000) ? live.hrBpm : "—";
+}
+function liveAdjust(dSpeed, dIncline) {
+  live.speed = Math.min(30, Math.max(0, Math.round((live.speed + dSpeed) * 10) / 10));
+  live.incline = Math.min(25, Math.max(-10, Math.round((live.incline + dIncline) * 10) / 10));
+  $("#liveSpeed").textContent = live.speed.toFixed(1);
+  $("#liveIncline").textContent = live.incline.toFixed(1);
+}
+function liveLap() {
+  const t = Math.floor(liveElapsed());
+  if (t > 0 && !live.lapMarks.includes(t)) live.lapMarks.push(t);
+  liveTick();
+}
+function liveFinish() {
+  if (live.running) liveStartPause();
+  liveTick();
+  if (live.recs.length < 2) { alert("Nothing recorded yet."); return; }
+  const end = live.recs[live.recs.length - 1].t;
+  const bounds = [0, ...live.lapMarks.filter(m => m < end).sort((a, b) => a - b), end];
+  const laps = [];
+  for (let i = 0; i + 1 < bounds.length; i++)
+    laps.push({ start: bounds[i], end: bounds[i + 1] });
+  setActivity({
+    source: "live recording",
+    records: live.recs.slice(),
+    laps,
+  });
+  switchTab("finish");
+}
+function liveReset() {
+  if (!confirm("Discard this live recording?")) return;
+  Object.assign(live, { running: false, accum: 0, nextT: 0, dist: 0, alt: 0,
+                        ascent: 0, recs: [], lapMarks: [] });
+  clearInterval(live.timer); live.timer = null;
+  $("#liveStart").textContent = "▶ start";
+  $("#liveState").textContent = "ready";
+  $("#liveLap").disabled = $("#liveFinish").disabled = $("#liveReset").disabled = true;
+  liveTick();
+}
+
+/* ------------------------------------------------------------- live BLE */
+async function connectHR() {
+  const st = $("#bleStatus");
+  if (!navigator.bluetooth) {
+    st.textContent = "Web Bluetooth unavailable here — use Chrome/Edge, or enable it in brave://flags. (You can still merge a watch file afterwards.)";
+    return;
+  }
+  try {
+    st.textContent = "choose your strap…";
+    const dev = await navigator.bluetooth.requestDevice({
+      filters: [{ services: ["heart_rate"] }] });
+    live.bleDevice = dev;
+    dev.addEventListener("gattserverdisconnected", () => {
+      st.textContent = "strap disconnected";
+      live.hrBpm = null;
+    });
+    const server = await dev.gatt.connect();
+    const svc = await server.getPrimaryService("heart_rate");
+    const ch = await svc.getCharacteristic("heart_rate_measurement");
+    await ch.startNotifications();
+    ch.addEventListener("characteristicvaluechanged", e => {
+      const dv = e.target.value;
+      const flags = dv.getUint8(0);
+      live.hrBpm = flags & 1 ? dv.getUint16(1, true) : dv.getUint8(1);
+      live.hrAt = Date.now();
+    });
+    st.textContent = "connected: " + (dev.name || "HR strap");
+  } catch (err) {
+    st.textContent = "not connected (" + err.message + ")";
+  }
+}
+
+/* --------------------------------------------------------------- finish */
+function actTotals(records) {
+  let ascent = 0, descent = 0;
+  for (let i = 1; i < records.length; i++) {
+    const d = records[i].alt - records[i - 1].alt;
+    if (d > 0) ascent += d; else descent -= d;
+  }
+  const last = records[records.length - 1];
+  return { duration: last.t, dist: last.dist, ascent, descent };
+}
+function setActivity(act) {
+  act.totals = actTotals(act.records);
+  state.activity = act;
+  $("#startTime").value = toLocalInput(Date.now() / 1000 - act.totals.duration);
+  refreshFinish();
+}
+function refreshFinish() {
+  const act = state.activity;
+  const has = !!act;
+  $("#noActivity").style.display = has ? "none" : "";
+  $("#finishBody").style.display = has ? "" : "none";
+  if (!has) return;
+
+  const t = act.totals;
+  const preview = hrPreviewStats();
+  const liveHrs = act.records.filter(r => r.hr != null).map(r => r.hr);
+  const hrShown = preview ? `${preview.avg} / ${preview.max}` :
+    liveHrs.length ? `${Math.round(liveHrs.reduce((a, b) => a + b) / liveHrs.length)} / ${Math.max(...liveHrs)}` : "—";
+  $("#summary").innerHTML = totalsHtml([
+    [fmtDur(t.duration), "duration"],
+    [(t.dist / 1000).toFixed(2) + " km", "distance"],
+    ["+" + Math.round(t.ascent) + " m", "ascent ▲"],
+    ["−" + Math.round(t.descent) + " m", "descent"],
+    [fmtPace(t.dist / t.duration * 3.6), "avg pace"],
+    [String(act.laps.length), "laps"],
+    [hrShown, "avg/max ♥"],
+    [act.source, "source"],
+  ]);
+
+  const adopt = state.hr && $("#adoptStart").checked;
+  $("#startTime").disabled = !!adopt;
+  if (adopt)
+    $("#startTime").value =
+      toLocalInput(state.hr.start_epoch + Number($("#hrOffset").value || 0));
+
+  $("#hrCoverage").textContent = preview ?
+    `matched ${preview.matched}/${preview.total} records (${Math.round(preview.matched / preview.total * 100)}%) · avg ${preview.avg} · max ${preview.max} bpm` : "";
+
+  drawProfile($("#finishChart"), act.records,
+    state.hr ? { samples: state.hr.samples, offset: Number($("#hrOffset").value || 0) } : null);
+}
+
+/* client-side mirror of treadlab/merge.py — preview/coverage display only;
+   the authoritative merge happens server-side at export */
+function hrPreviewStats() {
+  if (!state.hr || !state.activity) return null;
+  const samples = state.hr.samples;
+  if (!samples || !samples.length) return null;
+  const off = Number($("#hrOffset").value || 0);
+  const times = samples.map(s => s[0]);
+  let matched = 0, sum = 0, max = 0;
+  for (const rec of state.activity.records) {
+    const want = rec.t + off;
+    let i = lowerBound(times, want);
+    let best = null;
+    for (const j of [i - 1, i]) {
+      if (j >= 0 && j < samples.length &&
+          (best === null || Math.abs(times[j] - want) < Math.abs(times[best] - want)))
+        best = j;
+    }
+    if (best === null) continue;
+    const gap = Math.abs(times[best] - want);
+    if (gap <= 5 || (want - times[best] >= 0 && want - times[best] <= 10)) {
+      matched++; sum += samples[best][1]; max = Math.max(max, samples[best][1]);
+    }
+  }
+  if (!matched) return { matched, total: state.activity.records.length, avg: "—", max: "—" };
+  return { matched, total: state.activity.records.length,
+           avg: Math.round(sum / matched), max: Math.round(max) };
+}
+function lowerBound(arr, x) {
+  let lo = 0, hi = arr.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; arr[m] < x ? lo = m + 1 : hi = m; }
+  return lo;
+}
+
+async function onHrFile(file) {
+  if (!file) return;
+  $("#hrInfo").textContent = "reading " + file.name + "…";
+  try {
+    const buf = await file.arrayBuffer();
+    const j = describeFit(new Uint8Array(buf));
+    if (!j.ok) throw new Error(j.error || "could not parse file");
+    if (!j.has_hr) throw new Error("that file has no heart-rate data");
+    j.file = file.name;
+    state.hr = j;
+    $("#hrInfo").innerHTML =
+      `<b>${file.name}</b> — ${j.device || "unknown device"}${j.sport ? " · " + j.sport : ""}` +
+      ` · started ${fmtClock(j.start_epoch)} · ${fmtDur(j.duration_s)}` +
+      (j.distance_m ? ` · ${(j.distance_m / 1000).toFixed(2)} km` : "") +
+      ` · ♥ avg ${j.avg_hr} max ${j.max_hr}` +
+      (j.has_cad ? " · has cadence" : "") +
+      (j.has_temp ? ` · ${j.avg_temp != null ? "avg " + j.avg_temp + " °C" : "has temperature"}` : "") +
+      (j.has_gps ? " · has GPS (not copied)" : "") +
+      (j.warnings.length ? ` · <span style="color:var(--red)">${j.warnings.join("; ")}</span>` : "");
+    $("#hrClear").style.display = "";
+    $("#hrControls").style.display = "";
+    $("#copyCad").parentElement.style.display = j.has_cad ? "" : "none";
+    $("#copyTemp").parentElement.style.display = j.has_temp ? "" : "none";
+    // If you typed a cadence into the plan, that is the number you meant --
+    // don't let the watch's cadence quietly replace it.
+    if (j.has_cad && state.activity
+        && state.activity.records.some(r => r.cad != null)) {
+      $("#copyCad").checked = false;
+    }
+    refreshFinish();
+  } catch (err) {
+    state.hr = null;
+    $("#hrInfo").textContent = "✗ " + err.message;
+    $("#hrControls").style.display = "none";
+    refreshFinish();
+  }
+}
+function clearHrFile() {
+  state.hr = null;
+  $("#hrFile").value = "";
+  $("#hrInfo").textContent = "no file loaded";
+  $("#hrClear").style.display = "none";
+  $("#hrControls").style.display = "none";
+  refreshFinish();
+}
+
+async function exportFit() {
+  const act = state.activity;
+  if (!act) return;
+  const status = $("#exportStatus");
+  const adopt = state.hr && $("#adoptStart").checked;
+  const offset = Number($("#hrOffset").value || 0);
+  const startEpoch = adopt ? state.hr.start_epoch + offset
+                           : fromLocalInput($("#startTime").value);
+  if (!startEpoch) { status.textContent = "✗ set a start time first"; return; }
+  state.settings.sport = $("#sportSel").value;
+  state.settings.startAlt = parseFloat($("#startAlt").value) || 0;
+  state.settings.gpsLoc = $("#gpsLoc").value;
+  saveLocal();
+
+  // the dropdown carries both halves as "sport/sub_sport"
+  const [sport, subSport] = String(state.settings.sport).split("/");
+  const payload = {
+    start_epoch: startEpoch,
+    sport: sport || "running",
+    sub_sport: subSport || "virtual_activity",
+    start_alt: state.settings.startAlt,
+    gps: state.settings.gpsLoc === "off" ? false : state.settings.gpsLoc,
+    calories: parseFloat($("#calories").value) || null,
+    records: act.records.map(r => ({
+      t: r.t, speed: r.speed, alt: r.alt, dist: r.dist,
+      ...(r.hr != null ? { hr: r.hr } : {}),
+      ...(r.cad != null ? { cad: r.cad } : {}),
+      ...(r.power != null ? { power: r.power } : {}),
+    })),
+    laps: act.laps,
+    hr: state.hr ? { samples: state.hr.samples, offset,
+                     copy_cadence: $("#copyCad").checked,
+                     copy_temp: $("#copyTemp").checked } : null,
+  };
+  status.textContent = "building FIT…";
+  try {
+    const { fit, name, mergeStats } = buildExport(payload);
+    const blob = new Blob([fit], { type: "application/octet-stream" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+    const extra = mergeStats
+      ? ` · HR merged onto ${mergeStats.matched}/${mergeStats.total} records` : "";
+    status.textContent = `✔ ${name} (${(blob.size / 1024).toFixed(1)} kB)${extra} — upload it at strava.com/upload`;
+  } catch (err) {
+    status.textContent = "✗ export failed: " + err.message;
+  }
+}
+
+/* ------------------------------------------------------------ tabs, IO */
+function switchTab(name) {
+  $$(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  $$(".pane").forEach(p => p.classList.toggle("active", p.id === "tab-" + name));
+  if (name === "finish") refreshFinish();
+  if (name === "plan") recalcPlan();
+}
+function saveLocal() {
+  try {
+    localStorage.setItem("treadlab", JSON.stringify(
+      { plan: state.plan, settings: state.settings }));
+  } catch (e) { /* private mode etc. */ }
+}
+function loadLocal() {
+  try {
+    const j = JSON.parse(localStorage.getItem("treadlab"));
+    if (j && Array.isArray(j.plan) && j.plan.length) state.plan = j.plan.map(normSeg);
+    if (j && j.settings) {
+      Object.assign(state.settings, j.settings);
+      if (j.settings.gpsLoc === undefined)  // migrate pre-dropdown checkbox
+        state.settings.gpsLoc = j.settings.gpsLoop === false ? "off" : "watopia";
+      delete state.settings.gpsLoop;
+      // sport used to hold just the sub-sport, before rides were an option
+      if (state.settings.sport && !String(state.settings.sport).includes("/"))
+        state.settings.sport = "running/" + state.settings.sport;
+    }
+  } catch (e) { /* corrupted -> defaults */ }
+}
+
+function init() {
+  loadLocal();
+  if (!state.plan.length) state.plan = defaultPlan();
+  $("#sportSel").value = state.settings.sport;
+  $("#startAlt").value = state.settings.startAlt;
+  $("#gpsLoc").value = state.settings.gpsLoc || "watopia";
+  if (!$("#gpsLoc").value) $("#gpsLoc").value = "watopia";  // unknown stored key
+  renderPlan();
+
+  $$(".tab").forEach(b => b.addEventListener("click", () => switchTab(b.dataset.tab)));
+  $$("[data-goto]").forEach(a => a.addEventListener("click", e => {
+    e.preventDefault(); switchTab(a.dataset.goto);
+  }));
+
+  $("#addSeg").addEventListener("click", () => {
+    const last = state.plan[state.plan.length - 1];
+    state.plan.push(last ? { ...last }
+                         : normSeg({ mode: "time", len: "5:00", speed: 10, incline: 2 }));
+    renderPlan();
+  });
+  $("#dupSel").addEventListener("click", () => {
+    const picked = $$("#segTable .pick")
+      .map((cb, i) => cb.checked ? state.plan[i] : null).filter(Boolean);
+    if (!picked.length) { alert("Tick the segments to repeat first."); return; }
+    const times = Math.max(2, parseInt($("#dupCount").value) || 2);
+    for (let k = 1; k < times; k++) picked.forEach(s => state.plan.push({ ...s }));
+    renderPlan();
+  });
+  $("#clearPlan").addEventListener("click", () => {
+    if (confirm("Clear the whole plan?")) { state.plan = []; renderPlan(); }
+  });
+  $("#usePlan").addEventListener("click", () => {
+    const b = state.planBuild;
+    if (!b || b.records.length < 2) { alert("Add at least one segment first."); return; }
+    setActivity({ source: "plan", records: b.records, laps: b.laps });
+    switchTab("finish");
+  });
+
+  $("#liveStart").addEventListener("click", liveStartPause);
+  $("#liveLap").addEventListener("click", liveLap);
+  $("#liveFinish").addEventListener("click", liveFinish);
+  $("#liveReset").addEventListener("click", liveReset);
+  $("#bleBtn").addEventListener("click", connectHR);
+  $$(".step").forEach(b => b.addEventListener("click", () =>
+    liveAdjust(parseFloat(b.dataset.speed || 0), parseFloat(b.dataset.incline || 0))));
+
+  document.addEventListener("keydown", e => {
+    if (!$("#tab-live").classList.contains("active")) return;
+    if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+    const big = e.shiftKey;
+    const acts = {
+      " ": () => liveStartPause(),
+      "ArrowUp": () => liveAdjust(big ? 1 : 0.1, 0),
+      "ArrowDown": () => liveAdjust(big ? -1 : -0.1, 0),
+      "ArrowRight": () => liveAdjust(0, big ? 1 : 0.5),
+      "ArrowLeft": () => liveAdjust(0, big ? -1 : -0.5),
+      "l": () => liveLap(), "L": () => liveLap(),
+    };
+    if (acts[e.key]) { e.preventDefault(); acts[e.key](); }
+  });
+
+  $("#hrFile").addEventListener("change", e => onHrFile(e.target.files[0]));
+  $("#hrClear").addEventListener("click", clearHrFile);
+  ["adoptStart", "copyCad", "copyTemp", "hrOffset"].forEach(id =>
+    $("#" + id).addEventListener("input", refreshFinish));
+  $$(".nudge").forEach(b => b.addEventListener("click", () => {
+    $("#hrOffset").value = (Number($("#hrOffset").value) || 0) + Number(b.dataset.nudge);
+    refreshFinish();
+  }));
+  $("#startAlt").addEventListener("input", () => {
+    state.settings.startAlt = parseFloat($("#startAlt").value) || 0;
+    refreshFinish(); saveLocal();
+  });
+  $("#gpsLoc").addEventListener("input", () => {
+    state.settings.gpsLoc = $("#gpsLoc").value;
+    saveLocal();
+  });
+  $("#exportBtn").addEventListener("click", exportFit);
+
+  window.addEventListener("resize", () => {
+    recalcPlan();
+    if (state.activity) refreshFinish();
+  });
+
+  $("#version").textContent = "v" + VERSION;
+  $("#version2").textContent = VERSION;
+
+  /* Offline support for the installed web app. Deliberately skipped on
+     localhost: running TreadLab.bat on a PC then always serves the files
+     straight from disk, so an edit is never masked by a cached build. */
+  if ("serviceWorker" in navigator
+      && !["localhost", "127.0.0.1", ""].includes(location.hostname)) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+
+  liveAdjust(0, 0);
+  liveTick();
+
+  // module scope is private; expose a handle for debugging and tests
+  window.TL = { state, live, segSolve, normSeg, defaultPlan, renderPlan,
+                recalcPlan, switchTab, exportFit, onHrFile, refreshFinish,
+                liveStartPause, liveAdjust, liveLap, liveFinish,
+                buildExport, describeFit, VERSION };
+}
+document.addEventListener("DOMContentLoaded", init);
+return {  };
+});
+
+__def("engine/fit_reader.js", function () {
+"use strict";
+/* Minimal dependency-free FIT parser (read-only) for the HR-merge feature.
+   Faithful port of treadlab/fit_reader_lite.py: normal and
+   compressed-timestamp record headers, little- and big-endian definitions,
+   developer fields (skipped), unknown messages (skipped) and chained FIT
+   containers. Tolerant by design -- a bad CRC or truncated tail yields
+   whatever records were readable plus a warning; only a file with no FIT
+   header at all throws. */
+
+  const { BASE_TYPES, FIT_EPOCH_OFFSET, crc16, semicirclesToDeg } = __req("engine/fitbase.js");
+
+/* base-type number (low 5 bits) -> canonical base-type byte */
+const BY_NUM = {};
+for (const key of Object.keys(BASE_TYPES)) {
+  const b = Number(key);
+  BY_NUM[b & 0x1F] = b;
+}
+
+const TS_INVALID = 0xFFFFFFFF;
+
+const MANUFACTURERS = {
+  1: "Garmin", 23: "Suunto", 32: "Wahoo", 63: "COROS",
+  123: "Polar", 265: "Strava", 255: "development",
+};
+
+/* Python raises IndexError past the end of the buffer; a JS typed array
+   quietly yields undefined. Throwing keeps the two engines' tolerance for
+   truncated files identical. */
+function at(data, i) {
+  if (i < 0 || i >= data.length) throw new RangeError("read past end of file");
+  return data[i];
+}
+
+/** Decode one field's raw bytes -> scalar or null (arrays/strings -> null). */
+function decodeField(dv, off, size, base, bigEndian) {
+  const canonical = BY_NUM[base & 0x1F];
+  if (canonical === undefined || canonical === 0x07) return null;
+  const t = BASE_TYPES[canonical];
+  if (size !== t.size) return null; // array (or malformed size): not a scalar
+  const le = !bigEndian;
+  let v;
+  switch (canonical) {
+    case 0x00: case 0x02: case 0x0A: case 0x0D: v = dv.getUint8(off); break;
+    case 0x01: v = dv.getInt8(off); break;
+    case 0x83: v = dv.getInt16(off, le); break;
+    case 0x84: case 0x8B: v = dv.getUint16(off, le); break;
+    case 0x85: v = dv.getInt32(off, le); break;
+    case 0x86: case 0x8C: v = dv.getUint32(off, le); break;
+    case 0x88: v = dv.getFloat32(off, le); break;
+    case 0x89: v = dv.getFloat64(off, le); break;
+    case 0x8E: v = Number(dv.getBigInt64(off, le)); break;
+    case 0x8F: case 0x90: v = Number(dv.getBigUint64(off, le)); break;
+    default: return null;
+  }
+  if (v === t.invalid) return null;
+  return v;
+}
+
+class Def {
+  constructor(globalNum, bigEndian, fields) {
+    this.globalNum = globalNum;
+    this.bigEndian = bigEndian;
+    this.fields = fields; // [[defNum|null, size, baseType|null], ...]
+    this.size = fields.reduce((s, f) => s + f[1], 0);
+  }
+}
+
+/**
+ * Parse FIT bytes (Uint8Array) -> {records, fileId, session, laps,
+ * warnings, blocks}. Each record: {t: unix seconds, hr, cad, temp, speed,
+ * dist, alt, lat, lon} with absent keys omitted.
+ */
+function parseFit(data) {
+  if (data.length < 12) throw new Error("not a FIT file (too short)");
+  const out = {
+    records: [], fileId: {}, session: {}, laps: [], warnings: [], blocks: 0,
+  };
+  const dv = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  let pos = 0;
+  while (pos !== null && pos + 12 <= data.length && isFitTag(data, pos + 8)) {
+    pos = parseBlock(data, dv, pos, out);
+    out.blocks += 1;
+  }
+  if (out.blocks === 0) throw new Error("not a FIT file (missing '.FIT' header tag)");
+  return out;
+}
+
+function isFitTag(data, i) {
+  return data[i] === 0x2E && data[i + 1] === 0x46
+      && data[i + 2] === 0x49 && data[i + 3] === 0x54;
+}
+
+/* Parse one header+body+crc block. Returns the offset after the block, or
+   null if it was truncated (a warning is recorded). */
+function parseBlock(data, dv, start, out) {
+  const hsize = data[start];
+  if (hsize < 12) {
+    out.warnings.push(`bad header size ${hsize}`);
+    return null;
+  }
+  const dataSize = dv.getUint32(start + 4, true);
+  let bodyEnd = start + hsize + dataSize;
+  if (bodyEnd > data.length) {
+    out.warnings.push("file shorter than declared data size");
+    bodyEnd = data.length;
+  } else if (bodyEnd + 2 <= data.length) {
+    const stored = dv.getUint16(bodyEnd, true);
+    if (crc16(data.subarray(start, bodyEnd)) !== stored) {
+      out.warnings.push("file CRC mismatch (parsed anyway)");
+    }
+  }
+
+  const defs = new Map();
+  let lastTs = null; // raw FIT seconds, for compressed-timestamp headers
+  let pos = start + hsize;
+  try {
+    while (pos < bodyEnd) {
+      const hdr = at(data, pos);
+      pos += 1;
+      if (hdr & 0x80) { // compressed-timestamp data message
+        const local = (hdr >> 5) & 0x3;
+        const offset5 = hdr & 0x1F;
+        const d = defs.get(local);
+        if (d === undefined) throw new Error("data message before definition");
+        if (lastTs !== null) {
+          const delta = (offset5 - (lastTs & 0x1F)) & 0x1F;
+          lastTs = lastTs + delta;
+        }
+        pos = readData(data, dv, pos, d, lastTs, out);
+      } else if (hdr & 0x40) { // definition message
+        const hasDev = Boolean(hdr & 0x20);
+        const local = hdr & 0xF;
+        const bigEndian = at(data, pos + 1) === 1;
+        const globalNum = dv.getUint16(pos + 2, !bigEndian);
+        const n = at(data, pos + 4);
+        pos += 5;
+        const fields = [];
+        for (let i = 0; i < n; i++) {
+          fields.push([at(data, pos), at(data, pos + 1), at(data, pos + 2)]);
+          pos += 3;
+        }
+        if (hasDev) { // developer fields: keep sizes, skip values later
+          const nDev = at(data, pos);
+          pos += 1;
+          for (let i = 0; i < nDev; i++) {
+            fields.push([null, at(data, pos + 1), null]);
+            pos += 3;
+          }
+        }
+        defs.set(local, new Def(globalNum, bigEndian, fields));
+      } else { // normal data message
+        const local = hdr & 0xF;
+        const d = defs.get(local);
+        if (d === undefined) throw new Error("data message before definition");
+        const newTs = peekTs(data, dv, pos, d);
+        if (newTs !== null) lastTs = newTs;
+        pos = readData(data, dv, pos, d, lastTs, out);
+      }
+    }
+  } catch (exc) {
+    out.warnings.push(`stopped early at offset ${pos}: ${exc.message}`);
+    return null;
+  }
+  return bodyEnd + 2 <= data.length ? bodyEnd + 2 : null;
+}
+
+/** Return the raw value of field 253 (timestamp) in this data message. */
+function peekTs(data, dv, pos, d) {
+  let off = 0;
+  for (const [defNum, size, base] of d.fields) {
+    if (defNum === 253) {
+      const v = decodeField(dv, pos + off, size, base, d.bigEndian);
+      return v !== TS_INVALID ? v : null;
+    }
+    off += size;
+  }
+  return null;
+}
+
+/** Consume one data message; harvest fields for the globals we care about. */
+function readData(data, dv, pos, d, rawTs, out) {
+  if (d.globalNum === 0 || d.globalNum === 18 || d.globalNum === 19 || d.globalNum === 20) {
+    const vals = new Map();
+    let off = 0;
+    for (const [defNum, size, base] of d.fields) {
+      if (defNum !== null && base !== null) {
+        const v = decodeField(dv, pos + off, size, base, d.bigEndian);
+        if (v !== null) vals.set(defNum, v);
+      }
+      off += size;
+    }
+    if (d.globalNum === 20) harvestRecord(vals, rawTs, out);
+    else if (d.globalNum === 0 && !Object.keys(out.fileId).length) out.fileId = harvestFileId(vals);
+    else if (d.globalNum === 18 && !Object.keys(out.session).length) out.session = harvestSession(vals);
+    else if (d.globalNum === 19 && out.laps.length < 500) {
+      out.laps.push({
+        start: vals.has(2) ? vals.get(2) + FIT_EPOCH_OFFSET : null,
+        elapsed_s: vals.has(7) ? vals.get(7) / 1000.0 : null,
+        dist_m: vals.has(9) ? vals.get(9) / 100.0 : null,
+        avg_hr: vals.get(15) ?? null,
+      });
+    }
+  }
+  return pos + d.size;
+}
+
+function harvestRecord(vals, rawTs, out) {
+  const ts = vals.has(253) ? vals.get(253) : rawTs;
+  if (ts === null || ts === undefined) return;
+  const rec = { t: ts + FIT_EPOCH_OFFSET };
+  const hr = vals.get(3);
+  if (hr) rec.hr = hr; // 0 bpm is a sensor dropout, not a heart rate
+  const cad = vals.get(4);
+  if (cad !== undefined) {
+    const frac = vals.get(53);
+    rec.cad = cad + (frac !== undefined ? frac / 128.0 : 0.0);
+  }
+  const temp = vals.get(13);
+  if (temp !== undefined) rec.temp = temp; // sint8 degC; 0 is valid
+  const speed = vals.has(73) ? vals.get(73) : vals.get(6);
+  if (speed !== undefined) rec.speed = speed / 1000.0;
+  const dist = vals.get(5);
+  if (dist !== undefined) rec.dist = dist / 100.0;
+  const alt = vals.has(78) ? vals.get(78) : vals.get(2);
+  if (alt !== undefined) rec.alt = alt / 5.0 - 500.0;
+  const lat = vals.get(0);
+  if (lat !== undefined) rec.lat = semicirclesToDeg(lat);
+  const lon = vals.get(1);
+  if (lon !== undefined) rec.lon = semicirclesToDeg(lon);
+  out.records.push(rec);
+}
+
+function harvestFileId(vals) {
+  const man = vals.get(1) ?? null;
+  return {
+    manufacturer: man,
+    manufacturer_name: MANUFACTURERS[man] ?? `manufacturer #${man}`,
+    product: vals.get(2) ?? null,
+    time_created: vals.has(4) ? vals.get(4) + FIT_EPOCH_OFFSET : null,
+  };
+}
+
+function harvestSession(vals) {
+  return {
+    sport: vals.get(5) ?? null,
+    sub_sport: vals.get(6) ?? null,
+    start_time: vals.has(2) ? vals.get(2) + FIT_EPOCH_OFFSET : null,
+    elapsed_s: vals.has(7) ? vals.get(7) / 1000.0 : null,
+    avg_hr: vals.get(16) ?? null,
+    max_hr: vals.get(17) ?? null,
+    ascent_m: vals.get(22) ?? null,
+    descent_m: vals.get(23) ?? null,
+    avg_temp_c: vals.get(57) ?? null,
+    max_temp_c: vals.get(58) ?? null,
+  };
+}
+return { parseFit };
+});
+
+__def("engine/fit_writer.js", function () {
+"use strict";
+/* Minimal FIT activity encoder (little-endian, protocol 1.0).
+   Faithful port of treadlab/fit_writer.py -- same message set, same field
+   order, same rounding, so both engines emit byte-identical files. */
+
+  const { BASE_TYPES, FIT_EPOCH_OFFSET, Sink, crc16, degToSemicircles, packValue, pyRound } = __req("engine/fitbase.js");
+
+const GLOBAL_FILE_ID = 0;
+const GLOBAL_SESSION = 18;
+const GLOBAL_LAP = 19;
+const GLOBAL_RECORD = 20;
+const GLOBAL_EVENT = 21;
+const GLOBAL_ACTIVITY = 34;
+
+const SPORT_NAMES = {
+  generic: 0, running: 1, cycling: 2, transition: 3,
+  fitness_equipment: 4, swimming: 5, walking: 11, hiking: 17,
+};
+
+const SUB_SPORT_NAMES = {
+  generic: 0, treadmill: 1, street: 2, trail: 3, track: 4,
+  indoor_cycling: 6, virtual_activity: 58,
+};
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+function fitTs(unixS) {
+  return pyRound(unixS) - FIT_EPOCH_OFFSET;
+}
+
+/** A fixed message layout: emits its definition and packs data records. */
+class Msg {
+  constructor(local, globalNum, fields) {
+    this.local = local;
+    this.globalNum = globalNum;
+    this.fields = fields; // [[fieldDefNum, baseTypeByte], ...]
+  }
+
+  definition(sink) {
+    sink.raw([0x40 | this.local, 0x00, 0x00]); // header, reserved, little-endian
+    sink.u16(this.globalNum);
+    sink.u8(this.fields.length);
+    for (const [defNum, base] of this.fields) {
+      sink.raw([defNum, BASE_TYPES[base].size, base]);
+    }
+  }
+
+  /** values: Map/object of fieldDefNum -> int; missing fields get the sentinel. */
+  data(sink, values) {
+    sink.u8(this.local);
+    for (const [defNum, base] of this.fields) {
+      packValue(sink, base, values.get(defNum));
+    }
+  }
+}
+
+/* record columns: model key -> [fieldDefNum, baseType, encoder] */
+const RECORD_COLUMNS = [
+  ["time", 253, 0x86, fitTs],
+  ["lat", 0, 0x85, degToSemicircles],
+  ["lon", 1, 0x85, degToSemicircles],
+  ["alt", 2, 0x84, (m) => clamp(pyRound((m + 500.0) * 5), 0, 0xFFFE)],
+  ["hr", 3, 0x02, (v) => clamp(pyRound(v), 0, 254)],
+  ["cad", 4, 0x02, (v) => clamp(pyRound(v), 0, 254)],
+  ["dist", 5, 0x86, (m) => pyRound(m * 100)],
+  ["speed", 6, 0x84, (ms) => clamp(pyRound(ms * 1000), 0, 0xFFFE)],
+  ["power", 7, 0x84, (w) => clamp(pyRound(w), 0, 0xFFFE)],
+  ["temp", 13, 0x01, (c) => clamp(pyRound(c), -127, 126)],
+];
+
+const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+
+/* Build per-lap value maps. laps: [{start, end}] in unix seconds; when
+   empty the whole activity is one lap. Stats come from the records inside
+   each lap's window. */
+function lapRows(laps, records, t0, t1) {
+  let src = (laps && laps.length) ? laps.slice() : [{ start: t0, end: t1 }];
+  src.sort((a, b) => a.start - b.start);
+  const rows = [];
+  src.forEach((lp, i) => {
+    const s = clamp(lp.start, t0, t1);
+    const e = Math.max(s, Math.min(t1, lp.end));
+    const rs = records.filter((r) => r.time >= s && r.time <= e);
+    const hrs = rs.filter((r) => r.hr != null).map((r) => r.hr);
+    const dl = rs.filter((r) => r.dist != null).map((r) => r.dist);
+    const ms = pyRound((e - s) * 1000);
+    rows.push(new Map([
+      [253, fitTs(e)], [254, i], [2, fitTs(s)], [7, ms], [8, ms],
+      [9, dl.length ? pyRound((dl[dl.length - 1] - dl[0]) * 100) : 0],
+      [0, 9], [1, 1],
+      [15, hrs.length ? pyRound(mean(hrs)) : null],
+      [16, hrs.length ? pyRound(Math.max(...hrs)) : null],
+    ]));
+  });
+  return rows;
+}
+
+/**
+ * records: array of objects with unix `time` (required) and optionally
+ * lat/lon (deg), alt (m), hr (bpm), cad (rpm), dist (m), speed (m/s),
+ * power (W), temp (C). laps: optional [{start, end}] in unix seconds.
+ * Returns a Uint8Array holding the complete FIT file.
+ */
+function writeActivityFit(records, {
+  sport = 0, subSport = 0, manufacturer = 255, product = 0,
+  serial = 0x1F2E3D4C, calories = null, laps = null,
+} = {}) {
+  records = records.filter((r) => r.time != null).slice();
+  if (!records.length) throw new Error("no timestamped records to write");
+  records.sort((a, b) => a.time - b.time);
+  if (typeof sport === "string") sport = SPORT_NAMES[sport.toLowerCase().trim()] ?? 0;
+  if (typeof subSport === "string") subSport = SUB_SPORT_NAMES[subSport.toLowerCase().trim()] ?? 0;
+
+  const present = RECORD_COLUMNS.filter(
+    (c) => c[0] === "time" || records.some((r) => r[c[0]] != null));
+
+  const fileId = new Msg(0, GLOBAL_FILE_ID,
+    [[0, 0x00], [1, 0x84], [2, 0x84], [3, 0x8C], [4, 0x86]]);
+  const event = new Msg(1, GLOBAL_EVENT,
+    [[253, 0x86], [0, 0x00], [1, 0x00], [4, 0x02]]);
+  const record = new Msg(2, GLOBAL_RECORD, present.map(([, num, base]) => [num, base]));
+  const lap = new Msg(3, GLOBAL_LAP, [
+    [253, 0x86], [254, 0x84], [2, 0x86], [7, 0x86], [8, 0x86], [9, 0x86],
+    [0, 0x00], [1, 0x00], [15, 0x02], [16, 0x02],
+  ]);
+  const session = new Msg(4, GLOBAL_SESSION, [
+    [253, 0x86], [254, 0x84], [2, 0x86], [3, 0x85], [4, 0x85], [5, 0x00],
+    [6, 0x00], [7, 0x86], [8, 0x86], [9, 0x86], [11, 0x84], [14, 0x84],
+    [15, 0x84], [16, 0x02], [17, 0x02], [18, 0x02], [19, 0x02],
+    [22, 0x84], [23, 0x84], [25, 0x84], [26, 0x84], [57, 0x01], [58, 0x01],
+    [0, 0x00], [1, 0x00],
+  ]);
+  const activity = new Msg(5, GLOBAL_ACTIVITY, [
+    [253, 0x86], [0, 0x86], [1, 0x84], [2, 0x00], [3, 0x00], [4, 0x00], [5, 0x86],
+  ]);
+
+  const t0 = records[0].time;
+  const t1 = records[records.length - 1].time;
+  const elapsedMs = pyRound((t1 - t0) * 1000);
+
+  const series = (key) => records.filter((r) => r[key] != null).map((r) => r[key]);
+  const dists = series("dist");
+  const totalDistM = dists.length ? dists[dists.length - 1] : 0.0;
+  const totalDistCm = pyRound(totalDistM * 100);
+  const hrs = series("hr");
+  const cads = series("cad");
+  const temps = series("temp");
+  const speeds = series("speed");
+  const alts = series("alt");
+  let ascent = 0.0, descent = 0.0;
+  for (let i = 1; i < alts.length; i++) {
+    const d = alts[i] - alts[i - 1];
+    if (d > 0) ascent += d; else descent -= d;
+  }
+  const lats = records.filter((r) => r.lat != null).map((r) => r.lat);
+  const lons = records.filter((r) => r.lon != null).map((r) => r.lon);
+
+  let avgSpeedMm;
+  if (totalDistM > 0 && elapsedMs > 0) avgSpeedMm = pyRound(totalDistM / (elapsedMs / 1000.0) * 1000);
+  else if (speeds.length) avgSpeedMm = pyRound(mean(speeds) * 1000);
+  else avgSpeedMm = null;
+
+  const temp8 = (v) => clamp(pyRound(v), -127, 126);
+
+  const body = new Sink();
+  fileId.definition(body);
+  fileId.data(body, new Map([
+    [0, 4], [1, manufacturer], [2, product], [3, serial], [4, fitTs(t0)]]));
+  event.definition(body);
+  event.data(body, new Map([[253, fitTs(t0)], [0, 0], [1, 0], [4, 0]])); // timer start
+  record.definition(body);
+  for (const r of records) {
+    const values = new Map();
+    for (const [key, num, , enc] of present) {
+      const v = r[key];
+      if (v != null) values.set(num, enc(v));
+    }
+    record.data(body, values);
+  }
+  event.data(body, new Map([[253, fitTs(t1)], [0, 0], [1, 4], [4, 0]])); // stop_all
+
+  const rows = lapRows(laps, records, t0, t1);
+  lap.definition(body);
+  for (const row of rows) lap.data(body, row);
+
+  session.definition(body);
+  session.data(body, new Map([
+    [253, fitTs(t1)], [254, 0], [2, fitTs(t0)],
+    [7, elapsedMs], [8, elapsedMs], [9, totalDistCm],
+    [0, 8], [1, 1],
+    [3, lats.length ? degToSemicircles(lats[0]) : null],
+    [4, lons.length ? degToSemicircles(lons[0]) : null],
+    [5, sport], [6, subSport],
+    [11, calories ? pyRound(calories) : null],
+    [14, avgSpeedMm],
+    [15, speeds.length ? pyRound(Math.max(...speeds) * 1000) : null],
+    [16, hrs.length ? pyRound(mean(hrs)) : null],
+    [17, hrs.length ? pyRound(Math.max(...hrs)) : null],
+    [18, cads.length ? pyRound(mean(cads)) : null],
+    [19, cads.length ? pyRound(Math.max(...cads)) : null],
+    [22, pyRound(ascent)], [23, pyRound(descent)],
+    [25, 0], [26, rows.length],
+    [57, temps.length ? temp8(mean(temps)) : null],
+    [58, temps.length ? temp8(Math.max(...temps)) : null],
+  ]));
+  activity.definition(body);
+  activity.data(body, new Map([
+    [253, fitTs(t1)], [0, elapsedMs], [1, 1], [2, 0],
+    [3, 26], [4, 1], [5, fitTs(t1)]]));
+
+  const bodyBytes = body.bytes();
+  const header = new Sink();
+  header.raw([14, 0x10]);
+  header.u16(2195); // profile version
+  header.u32(bodyBytes.length);
+  header.raw([0x2E, 0x46, 0x49, 0x54]); // ".FIT"
+  header.u16(crc16(header.bytes().subarray(0, 12)));
+
+  const out = new Uint8Array(header.length + bodyBytes.length + 2);
+  out.set(header.bytes(), 0);
+  out.set(bodyBytes, header.length);
+  const crc = crc16(out.subarray(0, out.length - 2));
+  out[out.length - 2] = crc & 0xFF;
+  out[out.length - 1] = (crc >>> 8) & 0xFF;
+  return out;
+}
+return { SPORT_NAMES, SUB_SPORT_NAMES, writeActivityFit };
+});
+
+__def("engine/fitbase.js", function () {
+"use strict";
+/* Shared low-level FIT constants and helpers.
+   Faithful port of treadlab/fitbase.py -- the Python and JS engines must
+   produce byte-identical files, so behaviour is mirrored exactly, quirks
+   included (see pyRound below). */
+
+const FIT_EPOCH_OFFSET = 631065600;
+
+const CRC_TABLE = [
+  0x0000, 0xCC01, 0xD801, 0x1400, 0xF001, 0x3C00, 0x2800, 0xE401,
+  0xA001, 0x6C00, 0x7800, 0xB401, 0x5000, 0x9C01, 0x8801, 0x4400,
+];
+
+/** Garmin FIT CRC-16 (nibble table algorithm). */
+function crc16(bytes, crc = 0) {
+  for (const byte of bytes) {
+    let tmp = CRC_TABLE[crc & 0xF];
+    crc = (crc >> 4) & 0x0FFF;
+    crc = crc ^ tmp ^ CRC_TABLE[byte & 0xF];
+    tmp = CRC_TABLE[crc & 0xF];
+    crc = (crc >> 4) & 0x0FFF;
+    crc = crc ^ tmp ^ CRC_TABLE[(byte >> 4) & 0xF];
+  }
+  return crc;
+}
+
+/* Python's round() is banker's rounding (half-to-even): round(2.5) == 2,
+   round(0.5) == 0. JavaScript's Math.round() rounds half up, so a value
+   landing exactly on .5 -- which the fixed-point FIT encodings hit often --
+   would encode one unit apart from the Python engine. This reproduces
+   Python, and is why the two engines agree byte-for-byte. */
+function pyRound(x) {
+  const f = Math.floor(x);
+  const diff = x - f;
+  if (diff > 0.5) return f + 1;
+  if (diff < 0.5) return f;
+  return f % 2 === 0 ? f : f + 1;
+}
+
+/* base type byte -> {name, size, invalid sentinel, signed} */
+const BASE_TYPES = {
+  0x00: { name: "enum", size: 1, invalid: 0xFF, signed: false },
+  0x01: { name: "sint8", size: 1, invalid: 0x7F, signed: true },
+  0x02: { name: "uint8", size: 1, invalid: 0xFF, signed: false },
+  0x83: { name: "sint16", size: 2, invalid: 0x7FFF, signed: true },
+  0x84: { name: "uint16", size: 2, invalid: 0xFFFF, signed: false },
+  0x85: { name: "sint32", size: 4, invalid: 0x7FFFFFFF, signed: true },
+  0x86: { name: "uint32", size: 4, invalid: 0xFFFFFFFF, signed: false },
+  0x07: { name: "string", size: 1, invalid: 0x00, signed: false },
+  0x88: { name: "float32", size: 4, invalid: 0xFFFFFFFF, float: true },
+  0x89: { name: "float64", size: 8, invalid: 0xFFFFFFFFFFFFFFFF, float: true },
+  0x0A: { name: "uint8z", size: 1, invalid: 0x00, signed: false },
+  0x8B: { name: "uint16z", size: 2, invalid: 0x0000, signed: false },
+  0x8C: { name: "uint32z", size: 4, invalid: 0x00000000, signed: false },
+  0x0D: { name: "byte", size: 1, invalid: 0xFF, signed: false },
+  0x8E: { name: "sint64", size: 8, invalid: 0x7FFFFFFFFFFFFFFF, signed: true },
+  0x8F: { name: "uint64", size: 8, invalid: 0xFFFFFFFFFFFFFFFF, signed: false },
+  0x90: { name: "uint64z", size: 8, invalid: 0x0000000000000000, signed: false },
+};
+
+function semicirclesToDeg(semi) {
+  return semi * (180.0 / 2 ** 31);
+}
+
+function degToSemicircles(deg) {
+  return pyRound(deg * 2 ** 31 / 180.0);
+}
+
+/** Growable little-endian byte buffer (the FIT files we write are all LE). */
+class Sink {
+  constructor() { this.b = []; }
+  u8(v) { this.b.push(v & 0xFF); }
+  u16(v) { this.b.push(v & 0xFF, (v >>> 8) & 0xFF); }
+  u32(v) {
+    this.b.push(v & 0xFF, (v >>> 8) & 0xFF, (v >>> 16) & 0xFF, (v >>> 24) & 0xFF);
+  }
+  raw(arr) { for (const x of arr) this.b.push(x & 0xFF); }
+  get length() { return this.b.length; }
+  bytes() { return Uint8Array.from(this.b); }
+}
+
+/* Two's complement masking makes signed values pack correctly at every
+   width, so one helper covers the whole integer set the writer uses. */
+function packValue(sink, baseType, value) {
+  const t = BASE_TYPES[baseType];
+  const v = (value === null || value === undefined) ? t.invalid : value;
+  if (t.size === 1) sink.u8(v);
+  else if (t.size === 2) sink.u16(v);
+  else if (t.size === 4) sink.u32(v);
+  else { // 64-bit: split into two 32-bit halves
+    const big = BigInt(Math.trunc(Number(v)));
+    sink.u32(Number(big & 0xFFFFFFFFn));
+    sink.u32(Number((big >> 32n) & 0xFFFFFFFFn));
+  }
+}
+return { BASE_TYPES, FIT_EPOCH_OFFSET, Sink, crc16, degToSemicircles, packValue, pyRound, semicirclesToDeg };
+});
+
+__def("engine/gps_loop.js", function () {
+"use strict";
+/* Cosmetic GPS track: a Zwift-style closed loop in empty ocean, sized so
+   the loop's length equals the activity's distance.
+   Faithful port of treadlab/gps_loop.py.
+
+   Each record's position comes from the distance stream, so speed changes,
+   laps and pauses stay consistent: faster seconds cover more of the loop,
+   and the final record arrives exactly back at the start. */
+
+const ANCHOR_LAT = -12.1;  // open Coral Sea, near Zwift's Watopia spot
+const ANCHOR_LON = 166.0;
+
+/* location key -> [lat, lon]; both are verified-empty open ocean */
+const LOCATIONS = {
+  watopia: [ANCHOR_LAT, ANCHOR_LON],
+  // Point Nemo, the oceanic pole of inaccessibility (~2,700 km from any
+  // land; the "spacecraft cemetery").
+  nemo: [-48.876, -123.393],
+};
+
+const N = 2048; // curve sampling resolution
+
+/** Organic loop shape: unit radius plus two gentle harmonics. Amplitudes
+    stay small so curvature is low everywhere -- sharper lobes made Strava's
+    track smoothing dent the pace trace at the pinch points. */
+function blob(theta) {
+  return 1.0 + 0.11 * Math.sin(2 * theta) + 0.06 * Math.sin(3 * theta + 1.1);
+}
+
+function polyline() {
+  const pts = [];
+  for (let i = 0; i <= N; i++) {
+    const th = 2 * Math.PI * i / N;
+    const r = blob(th);
+    pts.push([r * Math.cos(th), r * Math.sin(th)]);
+  }
+  const cum = [0.0];
+  for (let i = 0; i + 1 < pts.length; i++) {
+    cum.push(cum[cum.length - 1] + Math.hypot(pts[i + 1][0] - pts[i][0],
+                                              pts[i + 1][1] - pts[i][1]));
+  }
+  return { pts, cum };
+}
+
+/**
+ * Set lat/lon (degrees) on each record along one closed loop whose length
+ * equals the final distance. Records need monotonic `dist` in metres; a
+ * missing dist reuses the previous position. Returns how many were placed.
+ */
+function addOceanLoop(records, lat0 = ANCHOR_LAT, lon0 = ANCHOR_LON) {
+  let total = 0.0;
+  for (const r of records) {
+    if (r.dist != null) total = Math.max(total, Number(r.dist));
+  }
+  if (total <= 0) return 0;
+
+  const { pts, cum } = polyline();
+  const perim = cum[cum.length - 1];
+  const scale = total / perim; // metres per curve unit
+  const mPerDegLat = 111320.0;
+  const mPerDegLon = 111320.0 * Math.cos(lat0 * Math.PI / 180);
+
+  let n = 0, last = 0.0, j = 0;
+  for (const r of records) {
+    const d = r.dist == null ? last : Number(r.dist);
+    last = d;
+    const s = (d / total) * perim;
+    while (j + 1 < cum.length - 1 && cum[j + 1] < s) j += 1;
+    const seg = cum[j + 1] - cum[j];
+    const f = seg > 0 ? (s - cum[j]) / seg : 0.0;
+    const x = (pts[j][0] + f * (pts[j + 1][0] - pts[j][0])) * scale;
+    const y = (pts[j][1] + f * (pts[j + 1][1] - pts[j][1])) * scale;
+    r.lat = lat0 + y / mPerDegLat;
+    r.lon = lon0 + x / mPerDegLon;
+    n += 1;
+  }
+  return n;
+}
+return { ANCHOR_LAT, ANCHOR_LON, LOCATIONS, addOceanLoop };
+});
+
+__def("engine/index.js", function () {
+"use strict";
+/* The engine's public surface -- what server.py's two endpoints used to do,
+   now running in the browser. Faithful port of the _export_fit and
+   _parse_fit_response functions in treadlab/server.py, in the same order,
+   so the file bytes are identical either way. */
+
+  const { pyRound } = __req("engine/fitbase.js");
+  const { parseFit } = __req("engine/fit_reader.js");
+  const { writeActivityFit } = __req("engine/fit_writer.js");
+  const { ANCHOR_LAT, ANCHOR_LON, LOCATIONS, addOceanLoop } = __req("engine/gps_loop.js");
+  const { mergeHr } = __req("engine/merge.js");
+  const { addTexture } = __req("engine/terrain.js");
+
+
+
+const MAX_RECORDS = 2 * 86400;  // two days at 1 Hz is absurd for a treadmill
+const MAX_HR_SAMPLES = 30000;   // longer HR files get strided for the UI
+
+const SPORT_LABELS = {
+  0: "generic", 1: "running", 2: "cycling", 4: "fitness equipment",
+  5: "swimming", 11: "walking", 17: "hiking",
+};
+const SUB_SPORT_LABELS = { 1: "treadmill", 6: "indoor cycling", 58: "virtual activity" };
+
+const round1 = (x) => pyRound(x * 10) / 10;
+const pad2 = (n) => String(n).padStart(2, "0");
+
+/**
+ * req: {start_epoch, start_alt, sport, sub_sport, records:[{t,speed,dist,alt,hr?,cad?,temp?}],
+ *       laps:[{start,end}], gps: false|"watopia"|"nemo", calories,
+ *       hr: {samples, offset, copy_cadence, copy_temp}}
+ * Returns {fit: Uint8Array, name, mergeStats}.
+ */
+function buildExport(req) {
+  const recordsIn = req.records || [];
+  if (!recordsIn.length) throw new Error("no records to export");
+  if (recordsIn.length > MAX_RECORDS) throw new Error(`too many records (${recordsIn.length})`);
+  const start = Number(req.start_epoch || 0);
+  if (!(start > 0)) throw new Error("missing start_epoch");
+  const startAlt = Number(req.start_alt ?? 100.0);
+
+  const records = recordsIn.map((r) => {
+    const rec = {
+      t: Number(r.t),
+      time: start + Number(r.t),
+      speed: r.speed != null ? Number(r.speed) : null,
+      dist: r.dist != null ? Number(r.dist) : null,
+      alt: r.alt != null ? startAlt + Number(r.alt) : null,
+    };
+    if (r.hr != null) rec.hr = Number(r.hr);
+    if (r.cad != null) rec.cad = Number(r.cad);
+    if (r.temp != null) rec.temp = Number(r.temp);
+    if (r.power != null) rec.power = Number(r.power);
+    return rec;
+  });
+  records.sort((a, b) => a.t - b.t);
+
+  addTexture(records); // anti-alias the 0.2 m altitude grid (see terrain.js)
+
+  const gps = req.gps; // false/absent, true (legacy), or a location key
+  if (gps) {
+    const [lat0, lon0] = LOCATIONS[String(gps).toLowerCase()] || [ANCHOR_LAT, ANCHOR_LON];
+    addOceanLoop(records, lat0, lon0);
+  }
+
+  let mergeStats = null;
+  const hr = req.hr;
+  if (hr && hr.samples && hr.samples.length) {
+    mergeStats = mergeHr(records, hr.samples, {
+      offset: Number(hr.offset || 0.0),
+      copyCadence: Boolean(hr.copy_cadence ?? true),
+      copyTemp: Boolean(hr.copy_temp ?? true),
+    });
+  }
+  for (const rec of records) delete rec.t;
+
+  const laps = (req.laps || []).map((lp) => ({
+    start: start + Number(lp.start), end: start + Number(lp.end),
+  }));
+  const fit = writeActivityFit(records, {
+    sport: String(req.sport ?? "running"),
+    subSport: String(req.sub_sport ?? "virtual_activity"),
+    calories: req.calories ? Number(req.calories) : null,
+    laps,
+  });
+  const d = new Date(start * 1000);
+  const name = `treadlab_${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+             + `_${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}.fit`;
+  return { fit, name, mergeStats };
+}
+
+/** Summarise an uploaded watch FIT for the HR-merge panel. */
+function describeFit(bytes) {
+  let parsed;
+  try {
+    parsed = parseFit(bytes);
+  } catch (exc) {
+    return { ok: false, error: exc.message };
+  }
+  const recs = parsed.records;
+  if (!recs.length) {
+    return { ok: false, error: "no data records found in that file",
+             warnings: parsed.warnings };
+  }
+  const hrRecs = recs.filter((r) => r.hr != null);
+  const t0 = recs[0].t;
+  const t1 = recs[recs.length - 1].t;
+  let samples = hrRecs.map((r) => [
+    round1(r.t - t0), r.hr, r.cad != null ? round1(r.cad) : null, r.temp ?? null,
+  ]);
+  if (samples.length > MAX_HR_SAMPLES) {
+    const stride = Math.ceil(samples.length / MAX_HR_SAMPLES);
+    samples = samples.filter((_, i) => i % stride === 0);
+  }
+  const hrs = samples.map((s) => s[1]);
+  const temps = samples.map((s) => s[3]).filter((v) => v != null);
+  const sess = parsed.session;
+  const fid = parsed.fileId;
+  const dists = recs.filter((r) => r.dist != null).map((r) => r.dist);
+  const label = [SPORT_LABELS[sess.sport], SUB_SPORT_LABELS[sess.sub_sport]]
+    .filter(Boolean).join(" / ");
+  return {
+    ok: true,
+    n_records: recs.length,
+    start_epoch: t0,
+    duration_s: t1 - t0,
+    distance_m: dists.length ? dists[dists.length - 1] - dists[0] : null,
+    has_hr: samples.length > 0,
+    has_cad: samples.some((s) => s[2] != null),
+    has_gps: recs.some((r) => r.lat != null),
+    has_temp: temps.length > 0,
+    avg_temp: temps.length ? round1(temps.reduce((a, b) => a + b, 0) / temps.length) : null,
+    avg_hr: hrs.length ? pyRound(hrs.reduce((a, b) => a + b, 0) / hrs.length) : null,
+    max_hr: hrs.length ? Math.max(...hrs) : null,
+    device: fid.manufacturer_name ?? null,
+    sport: label,
+    start_pos: (() => {
+      const r = recs.find((x) => x.lat != null && x.lon != null);
+      return r ? [round5(r.lat), round5(r.lon)] : null;
+    })(),
+    samples,
+    warnings: parsed.warnings,
+  };
+}
+
+const round5 = (x) => pyRound(x * 1e5) / 1e5;
+return { LOCATIONS, buildExport, describeFit, parseFit, writeActivityFit };
+});
+
+__def("engine/merge.js", function () {
+"use strict";
+/* Map a recorded heart-rate stream onto a simulated activity's records.
+   Faithful port of treadlab/merge.py.
+
+   Records carry a relative time `t` in seconds; HR samples are
+   [t_rel, hr, cad] or [t_rel, hr, cad, temp_c] rows relative to their own
+   file's first record (older 3-element rows are still accepted).
+
+   Alignment: the record at activity-time t takes the HR sample nearest to
+   sample-time (t + offset). offset > 0 means the HR stream started earlier
+   than the simulated activity. Cadence and temperature ride along with
+   whichever sample supplied the heart rate. */
+
+  const { pyRound } = __req("engine/fitbase.js");
+
+const MATCH_TOLERANCE_S = 5.0;  // a sample this close counts as simultaneous
+const CARRY_FORWARD_S = 10.0;   // otherwise hold the previous sample this long
+
+function mergeHr(records, samples, {
+  offset = 0.0, copyCadence = true, copyTemp = true,
+} = {}) {
+  const cleaned = samples
+    .filter((s) => s && s[1] && Number(s[1]) > 0 && Number(s[1]) < 255)
+    .sort((a, b) => Number(a[0]) - Number(b[0]));
+  const times = cleaned.map((s) => Number(s[0]));
+  let matched = 0;
+  for (const rec of records) {
+    const want = Number(rec.t) + Number(offset);
+    const hit = nearest(cleaned, times, want);
+    if (hit === null) continue;
+    const sT = Number(hit[0]);
+    const sHr = Number(hit[1]);
+    const gap = Math.abs(sT - want);
+    if (gap <= MATCH_TOLERANCE_S || (want - sT >= 0 && want - sT <= CARRY_FORWARD_S)) {
+      rec.hr = pyRound(sHr);
+      if (copyCadence && hit.length > 2 && hit[2] != null) rec.cad = Number(hit[2]);
+      if (copyTemp && hit.length > 3 && hit[3] != null) rec.temp = Number(hit[3]);
+      matched += 1;
+    }
+  }
+  return { matched, total: records.length, hr_points: cleaned.length };
+}
+
+function nearest(samples, times, want) {
+  if (!samples.length) return null;
+  const i = lowerBound(times, want);
+  let best = null;
+  for (const j of [i - 1, i]) {
+    if (j >= 0 && j < samples.length) {
+      if (best === null || Math.abs(times[j] - want) < Math.abs(Number(best[0]) - want)) {
+        best = samples[j];
+      }
+    }
+  }
+  return best;
+}
+
+/** bisect_left */
+function lowerBound(arr, x) {
+  let lo = 0, hi = arr.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (arr[mid] < x) lo = mid + 1; else hi = mid;
+  }
+  return lo;
+}
+return { mergeHr };
+});
+
+__def("engine/terrain.js", function () {
+"use strict";
+/* Sub-metre terrain texture for exported altitude streams.
+   Faithful port of treadlab/terrain.py.
+
+   A perfectly linear synthetic climb collides with FIT's 0.2 m altitude
+   quantization: the encoded stream becomes a periodic staircase whose beat
+   pattern Strava's grade smoothing renders as a zig-zag GAP trace. Real
+   barometric recordings never show this, because real terrain has organic
+   sub-metre variation that swamps the staircase.
+
+   addTexture() layers a deterministic, grade-proportional undulation on
+   top: zero on flat ground, capped at 0.30 m, slope budget small enough
+   that climbs stay strictly monotonic and total ascent is preserved, and
+   endpoints blended to zero so net elevation is untouched. */
+
+const W1 = 181.0, W2 = 47.0;  // texture wavelengths, metres
+const K = 2.2;                // metres of amplitude per unit of |grade|
+const CAP = 0.30;             // amplitude ceiling, metres
+
+/** Mutates records' `alt` in place (needs `alt` + `dist`). Returns count. */
+function addTexture(records) {
+  const pts = records.filter((r) => r.alt != null && r.dist != null);
+  if (pts.length < 3) return 0;
+  const totalD = pts[pts.length - 1].dist - pts[0].dist;
+  if (totalD <= 0) return 0;
+
+  const raw = [];
+  for (let j = 0; j < pts.length; j++) {
+    const prev = pts[Math.max(0, j - 1)];
+    const next = pts[Math.min(pts.length - 1, j + 1)];
+    const dd = next.dist - prev.dist;
+    const g = dd > 0 ? Math.abs((next.alt - prev.alt) / dd) : 0.0;
+    const amp = Math.min(CAP, K * g);
+    const d = pts[j].dist;
+    raw.push(amp * (0.62 * Math.sin(2 * Math.PI * d / W1)
+                    + 0.38 * Math.sin(2 * Math.PI * d / W2 + 2.03)));
+  }
+
+  const t0 = raw[0], t1 = raw[raw.length - 1];
+  const d0 = pts[0].dist;
+  for (let j = 0; j < pts.length; j++) {
+    const f = (pts[j].dist - d0) / totalD;
+    pts[j].alt += raw[j] - (t0 * (1 - f) + t1 * f);
+  }
+  return pts.length;
+}
+return { addTexture };
+});
+
+__req("app.js");
+})();
+</script>
+</body>
+</html>

@@ -17,6 +17,9 @@ import os
 import shutil
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import make_single_file  # noqa: E402  (sibling tool, not an installed package)
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "treadlab", "static")
 DST = os.path.join(ROOT, sys.argv[1] if len(sys.argv) > 1 else "web")
@@ -38,6 +41,12 @@ def main():
     # elsewhere, so it is always written.
     open(os.path.join(DST, ".nojekyll"), "w").close()
 
+    # The single-file offline copy ships alongside the normal app, so the
+    # website and the USB/SSD copy each hold a spare of the other. Always
+    # regenerated from source here -- never hand-edited, never stale.
+    make_single_file.build(
+        os.path.join(DST, make_single_file.DEFAULT_NAME), quiet=True)
+
     total = 0
     files = []
     for base, dirs, names in os.walk(DST):
@@ -54,7 +63,8 @@ def main():
 
     missing = [f for f in ("index.html", "app.js", "sw.js", "manifest.json",
                            "icon-192.png", "icon-512.png",
-                           "apple-touch-icon.png", ".htaccess", ".nojekyll")
+                           "apple-touch-icon.png", ".htaccess", ".nojekyll",
+                           make_single_file.DEFAULT_NAME)
                if not os.path.exists(os.path.join(DST, f))]
     if missing:
         print("\n  WARNING missing: %s" % ", ".join(missing))

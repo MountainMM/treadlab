@@ -1,5 +1,30 @@
 # TreadLab v0.5.0
 
+> ## If you have not touched this in years, read this bit
+>
+> **To run it — pick whichever works:**
+>
+> 1. **Windows:** double-click **`TreadLab.bat`**. Your browser opens and
+>    that is it. Nothing needs installing.
+> 2. **Anything else, or if the .bat fails:** double-click
+>    **`TreadLab-any-computer.html`**. It is the whole app in one file and
+>    needs nothing but a web browser — no Python, no internet, any operating
+>    system. (The only thing it cannot do is talk to a Bluetooth HR strap.)
+> 3. **Nothing here works at all:** the same app is online at
+>    **https://mountainmm.github.io/treadlab/** — and you can download a
+>    fresh copy of the single file from there.
+>
+> **"Python was not found"** — use option 2 above. That is exactly what it
+> is there for; you do not need to fix anything.
+>
+> **Is this copy still intact?** Run
+> `python-embed\python.exe tools\verify.py`, or on a Mac or Linux machine
+> `shasum -a 256 -c checksums.sha256` / `sha256sum -c checksums.sha256`.
+> It checks all 323 files and tells you if the drive has lost anything.
+>
+> **What is all this made of?** See [VERSIONS.md](VERSIONS.md).
+
+
 **Turn treadmill runs into Strava-ready FIT files with real elevation gain —
 and your real heart rate.**
 

@@ -52,6 +52,29 @@ def main():
         if "files," in line:
             print("  " + line.strip())
 
+    # The root single-file copy (the one that travels on the USB/SSD) is
+    # rebuilt from the same source in the same breath as docs/, so the two
+    # can never disagree about which version they are.
+    r = subprocess.run([sys.executable,
+                        os.path.join(ROOT, "tools", "make_single_file.py")],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit("  single-file build failed:" + r.stdout + r.stderr)
+    for line in r.stdout.splitlines():
+        if "->" in line:
+            print("  single file:%s" % line.split("->")[1].rstrip())
+
+    # Re-record the integrity manifest last, so checksums.sha256 always
+    # describes exactly what is being published (see VERSIONS.md).
+    r = subprocess.run([sys.executable,
+                        os.path.join(ROOT, "tools", "verify.py"), "--write"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit("  manifest update failed:" + r.stdout + r.stderr)
+    for line in r.stdout.splitlines():
+        if "recorded" in line:
+            print("  " + line.strip())
+
     # 2. Stage everything and show what it amounts to.
     rule("2. Changes to upload")
     git("add", "-A")
