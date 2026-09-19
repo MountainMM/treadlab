@@ -11,13 +11,15 @@ Recorded **19 September 2026**, TreadLab **v0.5.0**.
 
 ## Checking this copy
 
+Double-click **`Verify.bat`**, or run it directly:
+
 ```
 python-embed\python.exe tools\verify.py
 ```
 
 It compares every file against `checksums.sha256` and says either
-"Everything matches" or exactly which files differ. Takes a second or
-two over 323 files (23.6 MB).
+"Everything matches" or exactly which files differ. A second or two
+over the whole folder (~23.6 MB).
 
 `checksums.sha256` is in the ordinary `sha256sum` format, so it also
 works with the tools already built into macOS and Linux, without needing
@@ -29,7 +31,10 @@ shasum -a 256 -c checksums.sha256    # macOS
 ```
 
 If you change something deliberately, re-record it with
-`tools\verify.py --write`. `Publish.bat` does this for you.
+`Verify.bat --write`. `Publish.bat` does this for you automatically —
+and before it does, it checks for changes that git cannot show you
+(anything inside `python-embed\`) and stops to ask, so the manifest can
+never quietly certify damage as if it were correct.
 
 **What the hashes do and do not prove.** They prove this folder is
 byte-for-byte what it was on the date above — which is the failure that

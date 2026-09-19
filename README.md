@@ -17,10 +17,11 @@
 > **"Python was not found"** — use option 2 above. That is exactly what it
 > is there for; you do not need to fix anything.
 >
-> **Is this copy still intact?** Run
-> `python-embed\python.exe tools\verify.py`, or on a Mac or Linux machine
+> **Is this copy still intact?** Double-click **`Verify.bat`**. On a Mac
+> or Linux machine you do not need Python for this at all:
 > `shasum -a 256 -c checksums.sha256` / `sha256sum -c checksums.sha256`.
-> It checks all 323 files and tells you if the drive has lost anything.
+> It checks every file in the folder and tells you if the drive has
+> lost anything. Worth doing right after copying to a new drive.
 >
 > **What is all this made of?** See [VERSIONS.md](VERSIONS.md).
 
