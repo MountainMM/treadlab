@@ -104,10 +104,20 @@ def _lap_rows(laps, records, t0, t1):
 
 
 def write_activity_fit(records, sport=0, sub_sport=0, manufacturer=255,
-                       product=0, serial=0x1F2E3D4C, calories=None, laps=None):
+                       product=0, serial=0x1F2E3D4C, calories=None, laps=None,
+                       utc_offset_s=0):
     """records: list of dicts with unix 'time' (required) and optionally
     lat/lon (deg), alt (m), hr (bpm), cad (rpm), dist (m), speed (m/s),
     power (W), temp (C). laps: optional [{'start': unix_s, 'end': unix_s}].
+
+    utc_offset_s: seconds east of UTC AT THE ACTIVITY'S INSTANT (e.g. 3600
+    for BST). FIT has no timezone field; local time is encoded as the gap
+    between local_timestamp and timestamp. Pass this in rather than reading
+    the machine clock here, so the Python and JS engines stay byte-identical
+    wherever they run. 0 means "not known", which reproduces the old
+    behaviour: the file claims local == UTC and importers must guess.
+    See TIMEZONE-FIX.md.
+
     Returns complete FIT file bytes."""
     records = [r for r in records if r.get("time") is not None]
     if not records:
@@ -213,8 +223,10 @@ def write_activity_fit(records, sport=0, sub_sport=0, manufacturer=255,
         57: temp8(sum(temps) / len(temps)) if temps else None,
         58: temp8(max(temps)) if temps else None})
     body += activity.definition()
+    # field 5 is local_timestamp: timestamp + offset. Equal values would
+    # claim a zero offset, which is what this fix exists to stop.
     body += activity.data({253: _fit_ts(t1), 0: elapsed_ms, 1: 1, 2: 0,
-                           3: 26, 4: 1, 5: _fit_ts(t1)})
+                           3: 26, 4: 1, 5: _fit_ts(t1 + utc_offset_s)})
 
     header = bytearray([14, 0x10])
     header += struct.pack("<H", 2195)  # profile version

@@ -731,6 +731,12 @@ async function exportFit() {
   const [sport, subSport] = String(state.settings.sport).split("/");
   const payload = {
     start_epoch: startEpoch,
+    // The UTC offset AT THE ACTIVITY'S INSTANT, not at "now", so a file
+    // built in one DST period for a run in another is still right.
+    // getTimezoneOffset() counts minutes WEST of UTC, hence the negation.
+    // Without this the file claims local == UTC and whatever imports it
+    // has to guess from its own clock. See TIMEZONE-FIX.md.
+    utc_offset_s: -new Date(startEpoch * 1000).getTimezoneOffset() * 60,
     sport: sport || "running",
     sub_sport: subSport || "virtual_activity",
     start_alt: state.settings.startAlt,

@@ -5,7 +5,7 @@ nothing updated. This file records exactly what it is built from, so
 that a future you — or a future computer — can tell whether this copy is
 still the real thing.
 
-Recorded **19 September 2026**, TreadLab **v0.5.0**.
+Recorded **20 September 2026**, TreadLab **v0.5.1**.
 
 ---
 

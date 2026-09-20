@@ -82,6 +82,7 @@ export function buildExport(req) {
     subSport: String(req.sub_sport ?? "virtual_activity"),
     calories: req.calories ? Number(req.calories) : null,
     laps,
+    utcOffsetS: Number(req.utc_offset_s || 0),
   });
   const d = new Date(start * 1000);
   const name = `treadlab_${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`

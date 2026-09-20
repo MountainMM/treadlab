@@ -1140,6 +1140,12 @@ async function exportFit() {
   const [sport, subSport] = String(state.settings.sport).split("/");
   const payload = {
     start_epoch: startEpoch,
+    // The UTC offset AT THE ACTIVITY'S INSTANT, not at "now", so a file
+    // built in one DST period for a run in another is still right.
+    // getTimezoneOffset() counts minutes WEST of UTC, hence the negation.
+    // Without this the file claims local == UTC and whatever imports it
+    // has to guess from its own clock. See TIMEZONE-FIX.md.
+    utc_offset_s: -new Date(startEpoch * 1000).getTimezoneOffset() * 60,
     sport: sport || "running",
     sub_sport: subSport || "virtual_activity",
     start_alt: state.settings.startAlt,
@@ -1676,7 +1682,7 @@ function lapRows(laps, records, t0, t1) {
  */
 function writeActivityFit(records, {
   sport = 0, subSport = 0, manufacturer = 255, product = 0,
-  serial = 0x1F2E3D4C, calories = null, laps = null,
+  serial = 0x1F2E3D4C, calories = null, laps = null, utcOffsetS = 0,
 } = {}) {
   records = records.filter((r) => r.time != null).slice();
   if (!records.length) throw new Error("no timestamped records to write");
@@ -1777,9 +1783,11 @@ function writeActivityFit(records, {
     [58, temps.length ? temp8(Math.max(...temps)) : null],
   ]));
   activity.definition(body);
+  // field 5 is local_timestamp: timestamp + offset. Equal values would
+  // claim a zero offset, which is what this fix exists to stop.
   activity.data(body, new Map([
     [253, fitTs(t1)], [0, elapsedMs], [1, 1], [2, 0],
-    [3, 26], [4, 1], [5, fitTs(t1)]]));
+    [3, 26], [4, 1], [5, fitTs(t1 + utcOffsetS)]]));
 
   const bodyBytes = body.bytes();
   const header = new Sink();
@@ -2066,6 +2074,7 @@ function buildExport(req) {
     subSport: String(req.sub_sport ?? "virtual_activity"),
     calories: req.calories ? Number(req.calories) : null,
     laps,
+    utcOffsetS: Number(req.utc_offset_s || 0),
   });
   const d = new Date(start * 1000);
   const name = `treadlab_${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`

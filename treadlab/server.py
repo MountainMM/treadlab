@@ -139,6 +139,7 @@ def _export_fit(req):
         sub_sport=str(req.get("sub_sport", "virtual_activity")),
         calories=float(calories) if calories else None,
         laps=laps,
+        utc_offset_s=float(req.get("utc_offset_s", 0) or 0),
     )
     name = "treadlab_%s.fit" % datetime.datetime.fromtimestamp(start).strftime(
         "%Y-%m-%d_%H%M%S")

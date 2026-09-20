@@ -101,6 +101,11 @@ SCENARIOS = {
         BASE, sport="cycling", sub_sport="indoor_cycling", gps=False, laps=[],
         records=[{"t": t, "speed": 6.5, "dist": 6.5 * t, "alt": 0.0,
                   "power": 90 + (t % 40)} for t in range(900)]),
+    # a real UTC offset carried into local_timestamp (field 5). Both engines
+    # must encode the same local_timestamp; a zero offset here would hide the
+    # very bug this case exists to guard. See TIMEZONE-FIX.md.
+    "utc_offset": dict(BASE, records=ramp(600, 10.0, 0.0), laps=[], gps=False,
+                      utc_offset_s=3600),
     # values engineered to land exactly on .5 after fixed-point scaling, so
     # Python's round-half-to-even and JS's round-half-up would disagree
     "rounding_edges": dict(BASE, start_alt=0.0, gps=False, laps=[], records=[

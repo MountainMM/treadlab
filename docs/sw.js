@@ -11,7 +11,7 @@
    running TreadLab.bat on your PC always serves the files straight from
    disk and never shows you a stale build. */
 
-const CACHE = "treadlab-v0.4.0";
+const CACHE = "treadlab-v0.5.1";
 
 const SHELL = [
   "./",

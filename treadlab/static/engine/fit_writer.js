@@ -105,7 +105,7 @@ function lapRows(laps, records, t0, t1) {
  */
 export function writeActivityFit(records, {
   sport = 0, subSport = 0, manufacturer = 255, product = 0,
-  serial = 0x1F2E3D4C, calories = null, laps = null,
+  serial = 0x1F2E3D4C, calories = null, laps = null, utcOffsetS = 0,
 } = {}) {
   records = records.filter((r) => r.time != null).slice();
   if (!records.length) throw new Error("no timestamped records to write");
@@ -206,9 +206,11 @@ export function writeActivityFit(records, {
     [58, temps.length ? temp8(Math.max(...temps)) : null],
   ]));
   activity.definition(body);
+  // field 5 is local_timestamp: timestamp + offset. Equal values would
+  // claim a zero offset, which is what this fix exists to stop.
   activity.data(body, new Map([
     [253, fitTs(t1)], [0, elapsedMs], [1, 1], [2, 0],
-    [3, 26], [4, 1], [5, fitTs(t1)]]));
+    [3, 26], [4, 1], [5, fitTs(t1 + utcOffsetS)]]));
 
   const bodyBytes = body.bytes();
   const header = new Sink();
