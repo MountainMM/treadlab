@@ -9,7 +9,7 @@
 
 import { buildExport, describeFit } from "./engine/index.js";
 
-const VERSION = "0.5.0";  // displayed version; keep treadlab/__init__.py in step
+const VERSION = "0.5.1";  // displayed version; keep treadlab/__init__.py in step
 
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));

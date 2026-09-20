@@ -113,8 +113,19 @@ poor trade.
 
 ## The app itself
 
-TreadLab **v0.5.0**. The version appears in two places that must always
-agree: `treadlab\__init__.py` and `treadlab\static\app.js`.
+TreadLab **v0.5.1**. The version appears in **three** places that must all
+agree, and nothing checks them automatically:
+
+| Where | What it is for |
+| --- | --- |
+| `treadlab\__init__.py` | the Python package version, reported by the server |
+| `treadlab\static\app.js` | the `VERSION` constant shown in the app's own UI |
+| `treadlab\static\sw.js` | the `CACHE` name, which forces installed PWAs to drop the old build |
+
+**This list said "two places" until 20 Sep 2026, and that is why releases kept
+missing `sw.js`** - v0.5.0 shipped with `CACHE` still reading `treadlab-v0.4.0`,
+and v0.5.1 was briefly published with `app.js` still saying `0.5.0`. If you bump
+one, bump all three in the same edit.
 
 There are three copies of the same app, and they are all built from
 `treadlab\static\`:

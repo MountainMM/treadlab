@@ -1,4 +1,4 @@
-# TreadLab v0.5.0
+# TreadLab v0.5.1
 
 > ## If you have not touched this in years, read this bit
 >
@@ -140,6 +140,32 @@ Doing it by hand is three commands from the project folder:
     python-embed\python.exe tools\make_web_build.py docs
     git add -A && git commit -m "what changed"
     git push
+
+#### Four things Publish.bat does **not** do
+
+**It does not run the tests.** It checks integrity - that the files match their
+checksums - not behaviour. Run both suites yourself first, because they cover
+different engines:
+
+    python-embed\python.exe tests\selfcheck.py
+
+then start the app and open **`/_test/`**, which rebuilds every golden file in
+JavaScript and compares byte for byte against the Python output.
+
+**It does not bump the service-worker cache.** `CACHE` in
+`treadlab/static/sw.js` is a manual edit, every release. Miss it and installed
+PWAs keep answering from the old cached build for an extra launch, so a fix can
+look like it did not work. v0.5.0 shipped with it still reading
+`treadlab-v0.4.0`.
+
+**It stages with `git add -A`, into a public repo.** Anything sitting in the
+working tree goes up, including files dropped there temporarily while working.
+Run `git status` first and look at it. A CSV containing real GPS start
+coordinates was caught this way once, moments before a push.
+
+**Edits made in `docs/` or `web/` are destroyed.** `make_web_build.py` does
+`rmtree(DST)` then copies from `treadlab/static/`. That folder is the source of
+truth; the other two are build output that gets recreated from scratch.
 
 Notes specific to Pages:
 
